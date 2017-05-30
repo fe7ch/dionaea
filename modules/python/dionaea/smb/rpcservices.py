@@ -1,30 +1,30 @@
-#*************************************************************************
-#*                               Dionaea
-#*                           - catches bugs -
-#*
-#*
-#*
-#* Copyright (C) 2010  Markus Koetter & Tan Kean Siong
-#* Copyright (C) 2009  Paul Baecher & Markus Koetter & Mark Schloesser
-#*
-#* This program is free software; you can redistribute it and/or
-#* modify it under the terms of the GNU General Public License
-#* as published by the Free Software Foundation; either version 2
-#* of the License, or (at your option) any later version.
-#*
-#* This program is distributed in the hope that it will be useful,
-#* but WITHOUT ANY WARRANTY; without even the implied warranty of
-#* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#* GNU General Public License for more details.
-#*
-#* You should have received a copy of the GNU General Public License
-#* along with this program; if not, write to the Free Software
-#* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-#*
-#*
-#*             contact nepenthesdev@gmail.com
-#*
-#*******************************************************************************/
+# ********************************************************************************
+# *                               Dionaea
+# *                           - catches bugs -
+# *
+# *
+# *
+# * Copyright (C) 2010  Markus Koetter & Tan Kean Siong
+# * Copyright (C) 2009  Paul Baecher & Markus Koetter & Mark Schloesser
+# *
+# * This program is free software; you can redistribute it and/or
+# * modify it under the terms of the GNU General Public License
+# * as published by the Free Software Foundation; either version 2
+# * of the License, or (at your option) any later version.
+# *
+# * This program is distributed in the hope that it will be useful,
+# * but WITHOUT ANY WARRANTY; without even the implied warranty of
+# * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# * GNU General Public License for more details.
+# *
+# * You should have received a copy of the GNU General Public License
+# * along with this program; if not, write to the Free Software
+# * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# *
+# *
+# *             contact nepenthesdev@gmail.com
+# *
+# *******************************************************************************/
 
 import logging
 import tempfile
@@ -43,7 +43,10 @@ rpclog = logging.getLogger('rpcservices')
 # 1:"Windows XP Service Pack 0/1",
 # 2:"Windows XP Service Pack 2",
 # 3:"Windows XP Service Pack 3",
+# 4:"Windows 7 Service Pack 1",
+# 5:"Linux Samba 4.3.11"
 OS_TYPE = 2
+
 
 class DCERPCValueError(Exception):
     """Raised when an a value is passed to a dcerpc operation which is invalid"""
@@ -52,15 +55,16 @@ class DCERPCValueError(Exception):
         self.varname = varname
         self.reason = reason
         self.value = value
+
     def __str__(self):
         return "%s is %s (%s)" % (self.varname, self.reason, self.value)
 
 
-class RPCService(object):
+class RPCService:
     uuid = ''
     version_major = 0
     version_minor = 0
-    # syntax = UUID('8a885d04-1ceb-11c9-9fe8-08002b104860').hex
+    #	syntax = UUID('8a885d04-1ceb-11c9-9fe8-08002b104860').hex
     ops = {}
     vulns = {}
 
@@ -73,27 +77,23 @@ class RPCService(object):
             if method != None:
                 if opnum in cls.vulns:
                     vulnname = cls.vulns[opnum]
-                    rpclog.info("Calling %s %s (%x) maybe %s exploit?" % (
-                        service.__class__.__name__,  opname, opnum, vulnname ) )
+                    rpclog.info(
+                        "Calling %s %s (%x) maybe %s exploit?" % (service.__class__.__name__, opname, opnum, vulnname))
                 else:
-                    rpclog.info("Calling %s %s (%x)" %
-                                ( service.__class__.__name__,  opname, opnum ) )
+                    rpclog.info("Calling %s %s (%x)" % (service.__class__.__name__, opname, opnum))
 
                 r = DCERPC_Header() / DCERPC_Response()
 
                 try:
                     data = method(con, p)
                 except DCERPCValueError as e:
-                    rpclog.debug("DCERPCValueError %s" % e)
-                    return None
-                except EOFError as e:
-                    rpclog.warn("EOFError data %s" % format(p.StubData))
+                    rpclog.warn("DCERPCValueError %s" % e)
                     return None
 
                 if data is None:
                     data = b''
 
-                #for metasploit OS type 'Windows XP Service Pack 2+"
+                # for metasploit OS type 'Windows XP Service Pack 2+"
                 if OS_TYPE == 2 or OS_TYPE == 3:
                     if opname == "NetNameCanonicalize":
                         r.PacketType = 3
@@ -103,11 +103,11 @@ class RPCService(object):
                 r.CallID = p.CallID
                 r.FragLen = 24 + len(data)
                 rpclog.debug(data)
-#				print(r.show())
+                #				print(r.show())
                 return r
         else:
-            rpclog.info("Unknown RPC Call to %s %i" %
-                        ( service.__class__.__name__,  opnum) )
+            rpclog.info("Unknown RPC Call to %s %i" % (service.__class__.__name__, opnum))
+
 
 class ATSVC(RPCService):
     uuid = UUID('1ff70682-0a51-30e8-076d-740be8cee98b').hex
@@ -117,37 +117,38 @@ class ATSVC(RPCService):
 
     }
 
-    class ATSVC_HANDLE(object):
+    class ATSVC_HANDLE:
         # 2.3.2 ATSVC_HANDLE
         #
         # http://msdn.microsoft.com/en-us/library/cc248473%28PROT.13%29.aspx
         #
-        #typedef [handle] const wchar_t* ATSVC_HANDLE;
+        # typedef [handle] const wchar_t* ATSVC_HANDLE;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Pointer = p.unpack_pointer()
                 self.Handle = p.unpack_string()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
 
-    #this function have not tested for the moment
+    # this function have not tested for the moment
     @classmethod
     def handle_NetrJobEnum(cls, con, p):
         # 3.2.5.2.3 NetrJobEnum (Opnum 2)
         #
         # http://msdn.microsoft.com/en-us/library/cc248425%28PROT.10%29.aspx
         #
-        #NET_API_STATUS NetrJobEnum(
+        # NET_API_STATUS NetrJobEnum(
         #  [in, string, unique] ATSVC_HANDLE ServerName,
         #  [in, out] LPAT_ENUM_CONTAINER pEnumContainer,
         #  [in] DWORD PreferedMaximumLength,
         #  [out] LPDWORD pTotalEntries,
         #  [in, out, unique] LPDWORD pResumeHandle
-        #);
+        # );
 
         x = ndrlib.Unpacker(p.StubData)
         ServerName = ATSVC.ATSVC_HANDLE(x)
@@ -164,8 +165,8 @@ class ATSVC(RPCService):
 
         r = ndrlib.Packer()
         # pEnumContainer
-        r.pack_long(0)		# EntriesRead
-        r.pack_pointer(0)	# pEntries
+        r.pack_long(0)  # EntriesRead
+        r.pack_pointer(0)  # pEntries
         # pTotalEntries
         r.pack_long(0)
         # pResumeHandle
@@ -201,7 +202,7 @@ class DCOM(RPCService):
     }
 
     @classmethod
-    def handle_RemoteActivation(cls,  con, p):
+    def handle_RemoteActivation(cls, con, p):
         # MS03-026
         pass
 
@@ -216,12 +217,12 @@ class DSSETUP(RPCService):
     ops = {
         0x09: "DsRolerUpgradeDownlevelServer"
     }
-    vulns  = {
+    vulns = {
         0x09: "MS04-11",
     }
 
     @classmethod
-    def handle_DsRolerUpgradeDownlevelServer(cls,  con, p):
+    def handle_DsRolerUpgradeDownlevelServer(cls, con, p):
         # MS04-011
         pass
 
@@ -268,7 +269,7 @@ class ISystemActivator(RPCService):
     ops = {
         0x4: "RemoteCreateInstance"
     }
-    vulns  = {
+    vulns = {
         0x4: "MS04-12",
     }
 
@@ -277,7 +278,8 @@ class ISystemActivator(RPCService):
         # MS04-012
         pass
 
-class RPC_C_AUTHN(object):
+
+class RPC_C_AUTHN:
     # http://msdn.microsoft.com/en-us/library/ms692656%28VS.85%29.aspx
     # seems globally used
     NONE = 0
@@ -290,23 +292,24 @@ class RPC_C_AUTHN(object):
     GSS_KERBEROS = 16
     DEFAULT = 0xFFFFFFFF
 
-class NCACN(object):
+
+class NCACN:
     # http://www.opengroup.org/onlinepubs/9692999399/apdxi.htm#tagtcjh_51
-    UDP =8
+    UDP = 8
     IP = 9
+
 
 class IOXIDResolver(RPCService):
     """[MS-DCOM]: Distributed Component Object Model (DCOM) Remote Protocol Specification
 
-    http://msdn.microsoft.com/en-us/library/cc226801%28PROT.10%29.aspx"""
-
+	http://msdn.microsoft.com/en-us/library/cc226801%28PROT.10%29.aspx"""
 
     uuid = UUID('99fcfec4-5260-101b-bbcb-00aa0021347a').hex
     ops = {
         0x5: "ServerAlive2"
     }
 
-    class COMVERSION(object):
+    class COMVERSION:
         # typedef struct tagCOMVERSION {
         # 	unsigned short MajorVersion;
         # 	unsigned short MinorVersion;
@@ -314,19 +317,19 @@ class IOXIDResolver(RPCService):
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.MajorVersion = 5
                 self.MinorVersion = 7
 
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_short(self.MajorVersion)
                 self.__packer.pack_short(self.MinorVersion)
 
         def size(self):
             return 4
 
-    class DUALSTRINGARRAY(object):
+    class DUALSTRINGARRAY:
         # 2.2.1.19.2 DUALSTRINGARRAY
         #
         # http://msdn.microsoft.com/en-us/library/cc226841%28PROT.10%29.aspx
@@ -338,22 +341,22 @@ class IOXIDResolver(RPCService):
         # } DUALSTRINGARRAY;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.NumEntries = 0
                 self.SecurityOffset = 0
                 self.StringArray = []
 
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
-                self.NumEntries=self.SecurityOffset=0
+            if isinstance(self.__packer, ndrlib.Packer):
+                self.NumEntries = self.SecurityOffset = 0
                 for x in self.StringArray:
                     rpclog.debug("x %s %i" % (x, x.size()))
                     xs = x.size()
                     if isinstance(x, IOXIDResolver.STRINGBINDING):
                         self.SecurityOffset += xs
                     self.NumEntries += xs
-                self.__packer.pack_short(int((self.NumEntries+4)/2))
-                self.__packer.pack_short(int((self.SecurityOffset+2)/2))
+                self.__packer.pack_short(int((self.NumEntries + 4) / 2))
+                self.__packer.pack_short(int((self.SecurityOffset + 2) / 2))
 
                 for i in self.StringArray:
                     if isinstance(i, IOXIDResolver.STRINGBINDING):
@@ -365,12 +368,10 @@ class IOXIDResolver(RPCService):
                         i.pack()
                 self.__packer.pack_raw(b'\0\0')
 
-
         def size(self):
             return 2 + 2 + sum([x.size() for x in self.StringArray]) + 2 + 2
 
-
-    class STRINGBINDING(object):
+    class STRINGBINDING:
         # 2.2.1.19.3 STRINGBINDING
         #
         # http://msdn.microsoft.com/en-us/library/cc226838%28PROT.10%29.aspx
@@ -380,18 +381,17 @@ class IOXIDResolver(RPCService):
         # 	char *aNetworkAddr
         # } STRINGBINDING;
         #
-        # TowerId ->
-        # http://www.opengroup.org/onlinepubs/9692999399/apdxi.htm#tagcjh_28
+        # TowerId -> http://www.opengroup.org/onlinepubs/9692999399/apdxi.htm#tagcjh_28
 
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.TowerId = NCACN.IP
                 self.NetworkAddr = ''
 
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_short(self.TowerId)
                 self.__packer.pack_raw(self.NetworkAddr.encode('utf16')[2:])
                 self.__packer.pack_raw(b'\0\0')
@@ -399,7 +399,7 @@ class IOXIDResolver(RPCService):
         def size(self):
             return 2 + len(self.NetworkAddr.encode('utf16')[2:]) + 2
 
-    class SECURITYBINDING(object):
+    class SECURITYBINDING:
         # 2.2.1.19.4 SECURITYBINDING
         #
         # http://msdn.microsoft.com/en-us/library/cc226839%28PROT.10%29.aspx
@@ -411,13 +411,13 @@ class IOXIDResolver(RPCService):
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.AuthnSvc = RPC_C_AUTHN.GSS_NEGOTIATE
                 self.Reserved = 0xffff
                 self.PrincName = 'none'
 
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_short(self.AuthnSvc)
                 if self.AuthnSvc != RPC_C_AUTHN.NONE:
                     self.__packer.pack_short(self.Reserved)
@@ -457,7 +457,7 @@ class IOXIDResolver(RPCService):
 
         s = IOXIDResolver.SECURITYBINDING(p)
         s.AuthnSvc = RPC_C_AUTHN.GSS_NEGOTIATE
-        s.PrincName = "OEMCOMPUTER"	# fixme: config value?
+        s.PrincName = "OEMCOMPUTER"  # fixme: config value?
         dsa.StringArray.append(s)
 
         # we are done, pack it
@@ -469,7 +469,7 @@ class IOXIDResolver(RPCService):
         p.pack_pointer(0x200008)
 
         # DUALSTRINGARRAY size
-        p.pack_long(int(dsa.size()/2))
+        p.pack_long(int(dsa.size() / 2))
 
         # DUALSTRINGARRAY
         dsa.pack()
@@ -488,41 +488,42 @@ class llsrpc(RPCService):
 class lsarpc(RPCService):
     uuid = UUID('12345778-1234-abcd-ef00-0123456789ab').hex
 
-    class LSAPR_HANDLE(object):
+    class LSAPR_HANDLE:
         # 2.2.2.1 LSAPR_HANDLE
         #
         # http://msdn.microsoft.com/en-us/library/cc234257%28v=PROT.10%29.aspx
         #
-        #typedef [context_handle] void* LSAPR_HANDLE;
+        # typedef [context_handle] void* LSAPR_HANDLE;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Handle = b''
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Value = p.unpack_raw(20)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_raw(self.Handle)
 
-    class LSAPR_OBJECT_ATTRIBUTES(object):
+    class LSAPR_OBJECT_ATTRIBUTES:
         # 2.2.9 LSAPR_OBJECT_ATTRIBUTES
         #
-        #http://help.outlook.com/en-us/140/cc234450%28PROT.10%29.aspx
+        # http://help.outlook.com/en-us/140/cc234450%28PROT.10%29.aspx
         #
-        #typedef struct _LSAPR_OBJECT_ATTRIBUTES {
+        # typedef struct _LSAPR_OBJECT_ATTRIBUTES {
         #  unsigned long Length;
         #  unsigned char* RootDirectory;
         #  PSTRING ObjectName;
         #  unsigned long Attributes;
         #  PLSAPR_SECURITY_DESCRIPTOR SecurityDescriptor;
         #  PSECURITY_QUALITY_OF_SERVICE SecurityQualityOfService;
-        #} LSAPR_OBJECT_ATTRIBUTES,
+        # } LSAPR_OBJECT_ATTRIBUTES,
         # *PLSAPR_OBJECT_ATTRIBUTES;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Length = self.__packer.unpack_long()
                 rpclog.debug("Length = %i" % self.Length)
                 self.RootDirectory = self.__packer.unpack_short()
@@ -533,57 +534,59 @@ class lsarpc(RPCService):
                 self.SecurityDescriptor = self.__packer.unpack_pointer()
                 self.SecurityQualityOfService = self.__packer.unpack_pointer()
 
-    class LSA_TRANSLATED_SID(object):
-        #http://msdn.microsoft.com/en-us/library/dd424381.aspx
+    class LSA_TRANSLATED_SID:
+        # http://msdn.microsoft.com/en-us/library/dd424381.aspx
         #
-        #typedef struct {
+        # typedef struct {
         #  SID_NAME_USE Use;
         #  ULONG RelativeId;
         #  LONG DomainIndex;
-        #} LSA_TRANSLATED_SID,
+        # } LSA_TRANSLATED_SID,
         # *PLSA_TRANSLATED_SID;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Use = 0
                 self.RelativeId = 0
                 self.DomainIndex = 0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_short(self.Use)
                 self.__packer.pack_long(self.RelativeId)
                 self.__packer.pack_long(self.DomainIndex)
                 # unknown
                 self.__packer.pack_long(0)
 
-    class LSAPR_TRANSLATED_SIDS(object):
+    class LSAPR_TRANSLATED_SIDS:
         # 2.2.15 LSAPR_TRANSLATED_SIDS
         #
-        #http://msdn.microsoft.com/en-us/library/cc234457%28PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc234457%28PROT.10%29.aspx
         #
-        #typedef struct _LSAPR_TRANSLATED_SIDS {
+        # typedef struct _LSAPR_TRANSLATED_SIDS {
         #  [range(0,1000)] unsigned long Entries;
         #  [size_is(Entries)] PLSA_TRANSLATED_SID Sids;
-        #} LSAPR_TRANSLATED_SIDS,
+        # } LSAPR_TRANSLATED_SIDS,
         # *PLSAPR_TRANSLATED_SIDS;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Entries = 0
                 self.Pointer = 0x3456
                 self.MaxCount = 0
                 self.Data = []
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Entries = self.__packer.unpack_long()
                 rpclog.debug("Entries = %i" % self.Entries)
                 self.Pointer = self.__packer.unpack_pointer()
                 self.MaxCount = self.__packer.unpack_long()
                 if self.Entries != 0:
-                    Sids = lsarpc.LSA_TRANSLATED_SID(self.__packer)
+                    Sids = LSA_TRANSLATED_SID(self.__packer)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_long(self.Entries)
                 rpclog.debug("Entries = %i" % self.Entries)
                 self.__packer.pack_pointer(self.Pointer)
@@ -592,28 +595,28 @@ class lsarpc(RPCService):
                     Sids = lsarpc.LSA_TRANSLATED_SID(self.__packer)
                     Sids.pack()
 
-
-    class LSAPR_TRUST_INFORMATION(object):
-        #2.2.11 LSAPR_TRUST_INFORMATION
+    class LSAPR_TRUST_INFORMATION:
+        # 2.2.11 LSAPR_TRUST_INFORMATION
         #
-        #http://msdn.microsoft.com/en-us/library/cc234452%28PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc234452%28PROT.10%29.aspx
         #
-        #typedef struct _LSAPR_TRUST_INFORMATION {
+        # typedef struct _LSAPR_TRUST_INFORMATION {
         #  RPC_UNICODE_STRING Name;
         #  PRPC_SID Sid;
-        #} LSAPR_TRUST_INFORMATION,
+        # } LSAPR_TRUST_INFORMATION,
         # *PLSAPR_TRUST_INFORMATION;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Name = []
                 self.Entries = 0
                 self.RelativeId = 0
                 self.Pointer = 0x11
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 # MaxCount,needed as the element of NDR array
                 self.__packer.pack_long(self.Entries)
 
@@ -628,39 +631,39 @@ class lsarpc(RPCService):
                 self.__packer.pack_long(self.Pointer)
                 for j in range(self.Entries):
                     self.__packer.pack_string(self.Name[j].encode('utf16')[2:])
-                #  PRPC_SID Sid	;
+                # PRPC_SID Sid	;
                 sid = samr.RPC_SID(self.__packer)
                 sid.Value = 'NT_AUTHORITY'
-                sid.SubAuthority = ['32','544']
+                sid.SubAuthority = ['32', '544']
                 sid.SubAuthorityCount = len(sid.SubAuthority)
 
                 # Maxcount, needed as the element of NDR array
                 self.__packer.pack_long(sid.SubAuthorityCount)
                 sid.pack()
 
-
-    class LSAPR_REFERENCED_DOMAIN_LIST(object):
+    class LSAPR_REFERENCED_DOMAIN_LIST:
         # 2.2.12 LSAPR_REFERENCED_DOMAIN_LIST
         #
-        #http://msdn.microsoft.com/en-us/library/cc234453%28PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc234453%28PROT.13%29.aspx
         #
-        #typedef struct _LSAPR_REFERENCED_DOMAIN_LIST {
+        # typedef struct _LSAPR_REFERENCED_DOMAIN_LIST {
         #  unsigned long Entries;
         #  [size_is(Entries)] PLSAPR_TRUST_INFORMATION Domains;
         #  unsigned long MaxEntries;
-        #} LSAPR_REFERENCED_DOMAIN_LIST,
+        # } LSAPR_REFERENCED_DOMAIN_LIST,
         # *PLSAPR_REFERENCED_DOMAIN_LIST;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Entries = 0
                 self.MaxEntries = 0
                 self.Data = []
                 self.Pointer = 0x4567
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_long(self.Entries)
                 for i in range(self.Entries):
                     # Pointer
@@ -672,41 +675,42 @@ class lsarpc(RPCService):
                     Domains.Entries = self.Entries
                     Domains.pack()
 
-    class LSAPR_SID_INFORMATION(object):
+    class LSAPR_SID_INFORMATION:
         # 2.2.17 LSAPR_SID_INFORMATION
         #
         # http://msdn.microsoft.com/en-us/library/cc234459%28v=PROT.10%29.aspx
         #
-        #typedef struct _LSAPR_SID_INFORMATION {
+        # typedef struct _LSAPR_SID_INFORMATION {
         #  PRPC_SID Sid;
-        #} LSAPR_SID_INFORMATION,
+        # } LSAPR_SID_INFORMATION,
         # *PLSAPR_SID_INFORMATION
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Count = self.__packer.unpack_long()
                 Sid = samr.RPC_SID(self.__packer)
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 pass
 
-    class LSAPR_SID_ENUM_BUFFER(object):
+    class LSAPR_SID_ENUM_BUFFER:
         # 2.2.18 LSAPR_SID_ENUM_BUFFER
         #
         # http://msdn.microsoft.com/en-us/library/cc234460%28PROT.10%29.aspx
         #
-        #typedef struct _LSAPR_SID_ENUM_BUFFER {
+        # typedef struct _LSAPR_SID_ENUM_BUFFER {
         #  [range(0,20480)] unsigned long Entries;
         #  [size_is(Entries)] PLSAPR_SID_INFORMATION SidInfo;
-        #} LSAPR_SID_ENUM_BUFFER,
+        # } LSAPR_SID_ENUM_BUFFER,
         # *PLSAPR_SID_ENUM_BUFFER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Entries = self.__packer.unpack_long()
                 self.Pointer = self.__packer.unpack_pointer()
                 self.MaxCount = self.__packer.unpack_long()
@@ -719,33 +723,34 @@ class lsarpc(RPCService):
             if isinstance(self.__packer, ndrlib.Packer):
                 pass
 
-    class LSAPR_TRANSLATED_NAME_EX(object):
-        #2.2.21 LSAPR_TRANSLATED_NAME_EX
+    class LSAPR_TRANSLATED_NAME_EX:
+        # 2.2.21 LSAPR_TRANSLATED_NAME_EX
         #
-        #http://msdn.microsoft.com/en-us/library/cc234463%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc234463%28v=PROT.13%29.aspx
         #
-        #typedef struct _LSAPR_TRANSLATED_NAME_EX {
+        # typedef struct _LSAPR_TRANSLATED_NAME_EX {
         #  SID_NAME_USE Use;
         #  RPC_UNICODE_STRING Name;
         #  long DomainIndex;
         #  unsigned long Flags;
-        #} LSAPR_TRANSLATED_NAME_EX,
+        # } LSAPR_TRANSLATED_NAME_EX,
         # *PLSAPR_TRANSLATED_NAME_EX;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
-                #2.2.13 SID_NAME_USE
+            if isinstance(self.__packer, ndrlib.Packer):
+                # 2.2.13 SID_NAME_USE
                 # http://msdn.microsoft.com/en-us/library/cc234454%28v=PROT.13%29.aspx
-                self.Use = 8 #SidTypeUnknown
+                self.Use = 8  # SidTypeUnknown
                 self.Flags = 0
                 self.DomainIndex = 0
                 self.Data = []
                 self.Pointer = 0x11
                 self.Entries = 0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 for i in range(self.Entries):
                     self.__packer.pack_short(self.Use)
                     Name = samr.RPC_UNICODE_STRING(self.__packer)
@@ -756,30 +761,30 @@ class lsarpc(RPCService):
                     self.__packer.pack_long(self.DomainIndex)
                     self.__packer.pack_long(self.Flags)
 
-
-    class LSAPR_TRANSLATED_NAMES_EX(object):
-        #2.2.22 LSAPR_TRANSLATED_NAMES_EX
+    class LSAPR_TRANSLATED_NAMES_EX:
+        # 2.2.22 LSAPR_TRANSLATED_NAMES_EX
         #
-        #http://msdn.microsoft.com/en-us/library/cc234464%28PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc234464%28PROT.13%29.aspx
         #
-        #typedef struct _LSAPR_TRANSLATED_NAMES_EX {
+        # typedef struct _LSAPR_TRANSLATED_NAMES_EX {
         #  [range(0,20480)] unsigned long Entries;
         #  [size_is(Entries)] PLSAPR_TRANSLATED_NAME_EX Names;
-        #} LSAPR_TRANSLATED_NAMES_EX,
+        # } LSAPR_TRANSLATED_NAMES_EX,
         # *PLSAPR_TRANSLATED_NAMES_EX;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Entries = 0
                 self.Data = []
                 self.Pointer = 0x6879
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Entries = self.__packer.unpack_long()
                 self.Pointer = self.__packer.unpack_pointer()
                 if self.Entries != 0:
-                    Sids = lsarpc.LSAPR_TRANSLATED_NAMES_EX(self.__packer)
+                    Sids = LSA_TRANSLATED_Name_EX(self.__packer)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_long(self.Entries)
                 self.__packer.pack_pointer(self.Pointer)
                 self.__packer.pack_long(self.Entries)
@@ -800,12 +805,12 @@ class lsarpc(RPCService):
         #
         # http://msdn.microsoft.com/en-us/library/cc234337%28PROT.10%29.aspx
         #
-        #NTSTATUS LsarOpenPolicy2(
+        # NTSTATUS LsarOpenPolicy2(
         #  [in, unique, string] wchar_t* SystemName,
         #  [in] PLSAPR_OBJECT_ATTRIBUTES ObjectAttributes,
         #  [in] ACCESS_MASK DesiredAccess,
         #  [out] LSAPR_HANDLE* PolicyHandle
-        #);
+        # );
 
         x = ndrlib.Unpacker(p.StubData)
         PSystemName = x.unpack_pointer()
@@ -831,7 +836,7 @@ class lsarpc(RPCService):
         #
         # http://msdn.microsoft.com/en-us/library/cc234494%28PROT.13%29.aspx
         #
-        #NTSTATUS LsarLookupNames2(
+        # NTSTATUS LsarLookupNames2(
         #  [in] LSAPR_HANDLE PolicyHandle,
         #  [in, range(0,1000)] unsigned long Count,
         #  [in, size_is(Count)] PRPC_UNICODE_STRING Names,
@@ -841,7 +846,7 @@ class lsarpc(RPCService):
         #  [in, out] unsigned long* MappedCount,
         #  [in] unsigned long LookupOptions,
         #  [in] unsigned long ClientRevision
-        #);
+        # );
 
         x = ndrlib.Unpacker(p.StubData)
         PolicyHandle = lsarpc.LSAPR_HANDLE(x)
@@ -849,7 +854,7 @@ class lsarpc(RPCService):
 
         # Maxcount, needed as the element of NDR array
         MaxCount = x.unpack_long()
-        Names = samr.RPC_UNICODE_STRING(x,MaxCount)
+        Names = samr.RPC_UNICODE_STRING(x, MaxCount)
         TranslatedSids = lsarpc.LSAPR_TRANSLATED_SIDS(x)
 
         LookupLevel = x.unpack_short()
@@ -872,7 +877,7 @@ class lsarpc(RPCService):
         # MappedCount
         r.pack_long(3)
         # Return
-        r.pack_pointer(0x00000107) #STATUS_SOME_NOT_MAPPED
+        r.pack_pointer(0x00000107)  # STATUS_SOME_NOT_MAPPED
 
         return r.get_buffer()
 
@@ -882,7 +887,7 @@ class lsarpc(RPCService):
         #
         # http://msdn.microsoft.com/en-us/library/cc234487%28PROT.13%29.aspx
         #
-        #NTSTATUS LsarLookupSids2(
+        # NTSTATUS LsarLookupSids2(
         #  [in] LSAPR_HANDLE PolicyHandle,
         #  [in] PLSAPR_SID_ENUM_BUFFER SidEnumBuffer,
         #  [out] PLSAPR_REFERENCED_DOMAIN_LIST* ReferencedDomains,
@@ -891,7 +896,7 @@ class lsarpc(RPCService):
         #  [in, out] unsigned long* MappedCount,
         #  [in] unsigned long LookupOptions,
         #  [in] unsigned long ClientRevision
-        #);
+        # );
 
         x = ndrlib.Unpacker(p.StubData)
         PolicyHandle = lsarpc.LSAPR_HANDLE(x)
@@ -903,8 +908,8 @@ class lsarpc(RPCService):
         MappedCount = x.unpack_long()
         LookupOptions = x.unpack_long()
         ClientRevision = x.unpack_long()
-        rpclog.debug ("LookupLevel %i MappedCount %i LookupOptions %i ClientRevision %i" %(
-            LookupLevel,MappedCount,LookupOptions,ClientRevision))
+        rpclog.debug("LookupLevel %i MappedCount %i LookupOptions %i ClientRevision %i" % (
+        LookupLevel, MappedCount, LookupOptions, ClientRevision))
 
         r = ndrlib.Packer()
         r.pack_pointer(0x23456)
@@ -914,34 +919,33 @@ class lsarpc(RPCService):
         ReferenceDomains.Entries = len(ReferenceDomains.Data)
         ReferenceDomains.pack()
 
-        # Nmap smb-enum-users.nse scanning will simply return none of the
-        # element has translated, ugly but it works for the moment
+        # Nmap smb-enum-users.nse scanning will simply return none of the element has translated, ugly but it works for the moment
         TranslatedNames = lsarpc.LSAPR_TRANSLATED_NAMES_EX(r)
         TranslatedNames.Entries = SidEnumBuffer.Entries
         TranslatedNames.pack()
 
         # return
         r.pack_long(0)
-        r.pack_pointer(0xc0000073) #STATUS_NONE_MAPPED
+        r.pack_pointer(0xc0000073)  # STATUS_NONE_MAPPED
 
         return r.get_buffer()
 
     @classmethod
     def handle_Close(cls, con, p):
-        #3.1.4.3 LsarClose (Opnum 0)
+        # 3.1.4.3 LsarClose (Opnum 0)
         #
-        #http://msdn.microsoft.com/en-us/library/cc234490%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc234490%28v=PROT.13%29.aspx
         #
-        #NTSTATUS LsarClose(
+        # NTSTATUS LsarClose(
         #  [in, out] LSAPR_HANDLE* ObjectHandle
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         ObjectHandle = lsarpc.LSAPR_HANDLE(x)
         rpclog.debug("ObjectHandle %s" % ObjectHandle)
 
         r = ndrlib.Packer()
         s = lsarpc.LSAPR_HANDLE(r)
-        s.Handle =  b'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+        s.Handle = b'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
         s.pack()
         r.pack_long(0)
 
@@ -999,7 +1003,6 @@ class nddeapi(RPCService):
         pass
 
 
-
 class NWWKS(RPCService):
     uuid = UUID('e67ab081-9844-3521-9d32-834f038001c0').hex
 
@@ -1007,7 +1010,7 @@ class NWWKS(RPCService):
         0x09: "NwOpenEnumNdsSubTrees",
         0x01: "NwChangePassword"
     }
-    vulns  = {
+    vulns = {
         0x09: "MS06-66",
         0x01: "MS06-66",
     }
@@ -1043,7 +1046,6 @@ class PNP(RPCService):
         pass
 
 
-
 class PolicyAgent(RPCService):
     uuid = UUID('d335b8f6-cb31-11d0-b0f9-006097ba4e54').hex
 
@@ -1055,29 +1057,30 @@ class pmapapi(RPCService):
 class RemoteAccess(RPCService):
     uuid = UUID('8f09f000-b7ed-11ce-bbd2-00001a181cad').hex
 
+
 class MGMT(RPCService):
     """ Remote Management Interface
-    http://www.opengroup.org/onlinepubs/9629399/apdxq.htm """
+	http://www.opengroup.org/onlinepubs/9629399/apdxq.htm """
 
     uuid = UUID('afa8bd80-7d8a-11c9-bef4-08002b102989').hex
     ops = {
-        0 : "inq_if_ids",
-        1 : "inq_stats",
-        2 : "is_server_listening",
-        3 : "stop_server_listening",
-        4 : "inq_princ_name"
+        0: "inq_if_ids",
+        1: "inq_stats",
+        2: "is_server_listening",
+        3: "stop_server_listening",
+        4: "inq_princ_name"
     }
-# As I lack a way to verify the code, this is commented, maybe samba4
-# smbtorture can help out
-    class handle_t(object):
+
+    # As I lack a way to verify the code, this is commented, maybe samba4 smbtorture can help out
+    class handle_t:
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.handle = self.__packer.unpack_short()
 
-    class uuid_t(object):
+    class uuid_t:
         # typedef struct {
         # 	unsigned32          time_low;
         # 	unsigned16          time_mid;
@@ -1088,7 +1091,7 @@ class MGMT(RPCService):
         # } uuid_t, *uuid_p_t;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer = p
                 self.time_low = 0
                 self.time_mid = 1
@@ -1098,17 +1101,18 @@ class MGMT(RPCService):
                 self.node = b"56789a"
 
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_long(self.time_low)
                 self.__packer.pack_short(self.time_mid)
                 self.__packer.pack_short(self.time_hi_and_version)
                 self.__packer.pack_small(self.clock_seq_hi_and_reserved)
                 self.__packer.pack_small(self.clock_seq_low)
                 self.__packer.pack_raw(self.node)
+
         def __str__(self):
             return "123455"
 
-    class rpc_if_id_t(object):
+    class rpc_if_id_t:
         # typedef struct {
         # 	uuid_t                  uuid;
         # 	unsigned16              vers_major;
@@ -1117,20 +1121,21 @@ class MGMT(RPCService):
         # typedef [ptr] rpc_if_id_t *rpc_if_id_p_t;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.uuid = MGMT.uuid_t(p)
                 self.vers_major = 0
                 self.vers_minor = 1
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.uuid.pack()
                 self.__packer.pack_short(self.vers_major)
                 self.__packer.pack_short(self.vers_minor)
-        def show(self):
-            rpclog.debug("uuid %s %i.%i" %
-                         (self.uuid, self.vers_major, self.vers_minor))
 
-    class rpc_if_id_vector_t(object):
+        def show(self):
+            rpclog.debug("uuid %s %i.%i" % (self.uuid, self.vers_major, self.vers_minor))
+
+    class rpc_if_id_vector_t:
         # typedef struct {
         # 	unsigned32              count;
         # 	[size_is(count)]
@@ -1139,14 +1144,15 @@ class MGMT(RPCService):
         # typedef [ptr] rpc_if_id_vector_t *rpc_if_id_vector_p_t;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.count = 0
                 self.if_id = []
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.count = len(self.if_id)
                 self.__packer.pack_long(self.count)
-                self.__packer.pack_long(self.count) # maybe array size?
+                self.__packer.pack_long(self.count)  # maybe array size?
                 # pointers ...
                 for i in self.if_id:
                     self.__packer.pack_pointer(65)
@@ -1159,6 +1165,7 @@ class MGMT(RPCService):
             rpclog.debug("count %i", len(self.if_id))
             for i in self.if_id:
                 i.show()
+
     @classmethod
     def handle_inq_if_ids(cls, con, p):
         #
@@ -1174,7 +1181,7 @@ class MGMT(RPCService):
         v.if_id.append(MGMT.rpc_if_id_t(r))
         v.show()
         v.pack()
-        r.pack_long(0) # return value
+        r.pack_long(0)  # return value
         return r.get_buffer()
 
     @classmethod
@@ -1202,33 +1209,32 @@ class MGMT(RPCService):
         # );
         x = ndrlib.Unpacker(p.StubData)
         handle = MGMT.handle_t(x)
-#		authn_proto = x.unpack_long()
-#		princ_name_size = x.unpack_long()
+        #		authn_proto = x.unpack_long()
+        #		princ_name_size = x.unpack_long()
 
         r = ndrlib.Packer()
         r.pack_string(b"oemcomputer")
-#		r.pack_long(0)
-#		r.pack_long(0)
+        #		r.pack_long(0)
+        #		r.pack_long(0)
         return r.get_buffer()
 
 
-
 __userinfo__ = {
-    'Administrator' : {
+    'Administrator': {
         'RID': 500,
-        'comment' : 'Built-in account for administering the computer/domain'
+        'comment': 'Built-in account for administering the computer/domain'
     },
-    'Guest' : {
+    'Guest': {
         'RID': 501,
-        'comment' : 'Built-in account for guest access the computer/domain'
+        'comment': 'Built-in account for guest access the computer/domain'
     },
-    'HelpAssistant' : {
+    'HelpAssistant': {
         'RID': 1000,
-        'comment' : 'Account for Providing Remote Assistance'
+        'comment': 'Account for Providing Remote Assistance'
     },
-    'SUPPORT_388945a0' : {
-        'RID' : 1002,
-        'comment' : 'This is a vendor\'s account for the Help and Support Service'
+    'SUPPORT_388945a0': {
+        'RID': 1002,
+        'comment': 'This is a vendor\'s account for the Help and Support Service'
     }
 }
 
@@ -1236,18 +1242,16 @@ __userinfo__ = {
 class samr(RPCService):
     """ [MS-SAMR]: Security Account Manager (SAM) Remote Protocol Specification (Client-to-Server)
 
-    http://msdn.microsoft.com/en-us/library/cc245476%28v=PROT.13%29.aspx
+	http://msdn.microsoft.com/en-us/library/cc245476%28v=PROT.13%29.aspx
 
-    http://download.microsoft.com/download/a/e/6/ae6e4142-aa58-45c6-8dcf-a657e5900cd3/%5BMS-SAMR%5D.pdf"""
-
-
+	http://download.microsoft.com/download/a/e/6/ae6e4142-aa58-45c6-8dcf-a657e5900cd3/%5BMS-SAMR%5D.pdf"""
 
     uuid = UUID('12345778-1234-abcd-ef00-0123456789ac').hex
 
     # Used for SAMR handle_LookupNamesInDomain and handle_QueryInformationUser
     LookupName = ""
 
-    class SAMPR_HANDLE(object):
+    class SAMPR_HANDLE:
         # 2.2.3.2 SAMPR_HANDLE
         #
         # http://msdn.microsoft.com/en-us/library/cc245544%28v=PROT.10%29.aspx
@@ -1256,15 +1260,16 @@ class samr(RPCService):
         #
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Handle = b''
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Value = p.unpack_raw(20)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_raw(self.Handle)
 
-    class RPC_SID_IDENTIFIER_AUTHORITY(object):
+    class RPC_SID_IDENTIFIER_AUTHORITY:
         # 2.4.1.1 RPC_SID_IDENTIFIER_AUTHORITY
         #
         # http://msdn.microsoft.com/en-us/library/cc230372%28PROT.10%29.aspx
@@ -1274,27 +1279,28 @@ class samr(RPCService):
         # } RPC_SID_IDENTIFIER_AUTHORITY;
         #
         SID_AUTHORITY = {
-            'NULL_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x00',
+            'NULL_SID_AUTHORITY'		: b'\x00\x00\x00\x00\x00\x00',
             'WORLD_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x01',
             'LOCAL_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x02',
             'CREATOR_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x03',
             'NON_UNIQUE_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x04',
-            'NT_AUTHORITY'				: b'\x00\x00\x00\x00\x00\x05',
-            'SECURITY_MANDATORY_LABEL_AUTHORITY'	: b'\x00\x00\x00\x00\x00\x10'
+            'NT_AUTHORITY'				: b'\x00\x00\x00\x00\x00\x05','SECURITY_MANDATORY_LABEL_AUTHORITY'	: b'\x00\x00\x00\x00\x00\x10'
         }
-        def __init__(self, p):
+        def
+
+        __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Value = ''
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Value = self.__packer.unpack_raw(6)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 if not self.SID_AUTHORITY.get(self.Value) == None:
                     self.__packer.pack_raw(self.SID_AUTHORITY[self.Value])
 
-
-    class RPC_SID(object):
+    class RPC_SID:
         # 2.4.2.2 RPC_SID
         #
         # http://msdn.microsoft.com/en-us/library/cc230364%28PROT.10%29.aspx
@@ -1310,21 +1316,21 @@ class samr(RPCService):
         #
         def __init__(self, p):
             self.__packer = p
-            if isinstance(p,ndrlib.Packer):
+            if isinstance(p, ndrlib.Packer):
                 self.Value = ''
-                self.Revision = 1 # must be 0x01
+                self.Revision = 1  # must be 0x01
                 self.SubAuthorityCount = 0
                 self.SubAuthority = []
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Revision = self.__packer.unpack_small()
                 self.SubAuthorityCount = self.__packer.unpack_small()
-                self.IdentifierAuthority = samr.RPC_SID_IDENTIFIER_AUTHORITY(
-                    self.__packer)
+                self.IdentifierAuthority = samr.RPC_SID_IDENTIFIER_AUTHORITY(self.__packer)
                 self.SubAuthority = []
                 for i in range(self.SubAuthorityCount):
                     self.SubAuthority.append(p.unpack_long())
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 # Revision
                 self.__packer.pack_small(self.Revision)
 
@@ -1340,7 +1346,7 @@ class samr(RPCService):
                 for i in range(self.SubAuthorityCount):
                     self.__packer.pack_long(int(self.SubAuthority[i]))
 
-    class RPC_UNICODE_STRING(object):
+    class RPC_UNICODE_STRING:
         # 2.3.5 RPC_UNICODE_STRING
         #
         # http://msdn.microsoft.com/en-us/library/cc230365%28PROT.10%29.aspx
@@ -1355,10 +1361,10 @@ class samr(RPCService):
         #
         def __init__(self, p, c=1):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Data =[]
-            elif isinstance(self.__packer,ndrlib.Unpacker):
-                self.Count = c #specify how many string array
+            elif isinstance(self.__packer, ndrlib.Unpacker):
+                self.Count = c  # specify how many string array
                 rpclog.debug("Count = %i" % self.Count)
                 for i in range(self.Count):
                     self.Length = self.__packer.unpack_short()
@@ -1366,12 +1372,12 @@ class samr(RPCService):
                     self.Reference = self.__packer.unpack_pointer()
                 for j in range(self.Count):
                     self.Buffer = self.__packer.unpack_string()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_rpc_unicode_string(self.Data)
 
-
-    class SAMPR_RID_ENUMERATION(object):
+    class SAMPR_RID_ENUMERATION:
         # 2.2.3.9 SAMPR_RID_ENUMERATION
         #
         # http://msdn.microsoft.com/en-us/library/cc245560%28PROT.10%29.aspx
@@ -1383,17 +1389,18 @@ class samr(RPCService):
         #  *PSAMPR_RID_ENUMERATION;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Name = []
                 self.RelativeId = 0
                 self.Pointer = 0x11
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.RelativeId = self.__packer.unpack_long()
-                self.Name = samr.RPC_UNICODE_STRING(self.__packer, Name)
+                self.Name = RPC_UNICODE_STRING(self.__packer, Name)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 for i in range(len(self.Name)):
-                    #RelativeID
+                    # RelativeID
                     self.__packer.pack_long(self.RelativeId)
 
                     b = samr.RPC_UNICODE_STRING(self.__packer)
@@ -1404,24 +1411,25 @@ class samr(RPCService):
                 for j in range(len(self.Name)):
                     self.__packer.pack_string(self.Name[j].encode('utf16')[2:])
 
-    class SAMPR_ENUMERATION_BUFFER(object):
+    class SAMPR_ENUMERATION_BUFFER:
         # 2.2.3.10 SAMPR_ENUMERATION_BUFFER
         #
         # http://msdn.microsoft.com/en-us/library/cc245561%28v=PROT.10%29.aspx
         #
         # typedef struct _SAMPR_ENUMERATION_BUFFER {
         #     unsigned long EntriesRead;
-                #    [size_is(EntriesRead)] PSAMPR_RID_ENUMERATION Buffer;
+        #    [size_is(EntriesRead)] PSAMPR_RID_ENUMERATION Buffer;
         # } SAMPR_ENUMERATION_BUFFER,
         # *PSAMPR_ENUMERATION_BUFFER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = 0
                 self.Buffer = []
                 self.Pointer = 0x4711
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 # EntriesRead
@@ -1435,7 +1443,7 @@ class samr(RPCService):
                 b.Name = self.Buffer
                 b.pack()
 
-    class SAMPR_DOMAIN_DISPLAY_USER(object):
+    class SAMPR_DOMAIN_DISPLAY_USER:
         # 2.2.8.2 SAMPR_DOMAIN_DISPLAY_USER
         #
         # http://msdn.microsoft.com/en-us/library/cc245632%28PROT.10%29.aspx
@@ -1447,58 +1455,60 @@ class samr(RPCService):
         #  RPC_UNICODE_STRING AccountName;
         #  RPC_UNICODE_STRING AdminComment;
         #  RPC_UNICODE_STRING FullName;
-        #} SAMPR_DOMAIN_DISPLAY_USER,
+        # } SAMPR_DOMAIN_DISPLAY_USER,
         # *PSAMPR_DOMAIN_DISPLAY_USER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Name = []
                 self.Index = 0
                 self.Rid = 0
                 # AccountControl
                 # http://msdn.microsoft.com/en-us/library/cc245514%28v=PROT.10%29.aspx
-                self.AccountControl = 16 # USER_NORMAL_ACCOUNT
+                self.AccountControl = 16  # USER_NORMAL_ACCOUNT
                 self.Pointer = 0x11
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.RelativeId = self.__packer.unpack_long()
-                self.Name = samr.RPC_UNICODE_STRING(self.__packer, Name)
+                self.Name = RPC_UNICODE_STRING(self.__packer, Name)
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
-                for i in range(int(len(self.Name)/3)):
-                    #Index
+            if isinstance(self.__packer, ndrlib.Packer):
+                for i in range(int(len(self.Name)/3 ) ):
+                    # Index
                     self.__packer.pack_long(self.Index)
-                    #RelativeID
+                    # RelativeID
                     self.__packer.pack_long(self.Rid)
-                    #AccountCotrol
+                    # AccountCotrol
                     self.__packer.pack_long(self.AccountControl)
 
                     for k in range(3):
                         b = samr.RPC_UNICODE_STRING(self.__packer)
-                        b.Data = self.Name[i*k]
+                        b.Data = self.Name[i*k ]
                         b.pack()
                         self.__packer.pack_pointer(self.Pointer)
 
                 for j in range(len(self.Name)):
                     self.__packer.pack_string(self.Name[j].encode('utf16')[2:])
 
-    class SAMPR_DOMAIN_DISPLAY_USER_BUFFER(object):
+    class SAMPR_DOMAIN_DISPLAY_USER_BUFFER:
         # 2.2.8.7 SAMPR_DOMAIN_DISPLAY_USER_BUFFER
         #
         # http://msdn.microsoft.com/en-us/library/cc245637%28PROT.13%29.aspx
         #
-        #typedef struct _SAMPR_DOMAIN_DISPLAY_USER_BUFFER {
+        # typedef struct _SAMPR_DOMAIN_DISPLAY_USER_BUFFER {
         #  unsigned long EntriesRead;
         #  [size_is(EntriesRead)] PSAMPR_DOMAIN_DISPLAY_USER Buffer;
-        #} SAMPR_DOMAIN_DISPLAY_USER_BUFFER,
+        # } SAMPR_DOMAIN_DISPLAY_USER_BUFFER,
         # *PSAMPR_DOMAIN_DISPLAY_USER_BUFFER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = 0
                 self.Buffer = []
                 self.Pointer = 0x4711
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 # EntriesRead
@@ -1512,7 +1522,7 @@ class samr(RPCService):
                 b.Name = self.Buffer
                 b.pack()
 
-    class ACCESS_ALLOWED_ACE(object):
+    class ACCESS_ALLOWED_ACE:
         # ACCESS_ALLOWED_ACE Structure
         #
         # http://msdn.microsoft.com/en-us/library/aa374847%28v=vs.85%29.aspx
@@ -1521,25 +1531,26 @@ class samr(RPCService):
         #  ACE_HEADER  Header;
         #  ACCESS_MASK Mask;
         #  DWORD       SidStart;
-        #} ACCESS_ALLOWED_ACE, *PACCESS_ALLOWED_ACE;
+        # } ACCESS_ALLOWED_ACE, *PACCESS_ALLOWED_ACE;
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.AceType = 0
                 self.AceFlags = 0
                 self.AceSize = 20
                 self.Mask = 0x0002035b
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
-                #http://msdn.microsoft.com/en-us/library/aa374919%28v=vs.85%29.aspx
+                # http://msdn.microsoft.com/en-us/library/aa374919%28v=vs.85%29.aspx
                 # typedef struct _ACE_HEADER {
                 #  BYTE AceType;
                 #  BYTE AceFlags;
                 #  WORD AceSize;
-                #} ACE_HEADER, *PACE_HEADER;
+                # } ACE_HEADER, *PACE_HEADER;
 
                 self.__packer.pack_small(self.AceType)
                 self.__packer.pack_small(self.AceFlags)
@@ -1556,7 +1567,7 @@ class samr(RPCService):
                 SidStart.SubAuthorityCount = len(SidStart.SubAuthority)
                 SidStart.pack()
 
-    class ACL(object):
+    class ACL:
         # ACL Structure
         # http://msdn.microsoft.com/en-us/library/aa374931%28v=vs.85%29.aspx
         #
@@ -1566,20 +1577,20 @@ class samr(RPCService):
         #  WORD AclSize;
         #  WORD AceCount;
         #  WORD Sbz2;
-        #} ACL, *PACL;
-        # A complete ACL consists of an ACL structure followed by an ordered
-        # list of zero or more access control entries (ACEs).
+        # } ACL, *PACL;
+        # A complete ACL consists of an ACL structure followed by an ordered list of zero or more access control entries (ACEs).
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.AclRevision = 2
                 self.Sbz1 = 0
                 self.AclSize = 20
                 self.AceCount = 1
                 self.Sbz2 = 0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 # ACL Structure
@@ -1593,7 +1604,7 @@ class samr(RPCService):
                 b = samr.ACCESS_ALLOWED_ACE(self.__packer)
                 b.pack()
 
-    class SECURITY_DESCRIPTOR(object):
+    class SECURITY_DESCRIPTOR:
         # 2.4.6 SECURITY_DESCRIPTOR
         #
         # http://msdn.microsoft.com/en-us/library/cc230366%28v=prot.10%29.aspx
@@ -1613,7 +1624,7 @@ class samr(RPCService):
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Revision = 1
                 self.Sbz1 = 0
                 self.Control = 0x8004
@@ -1621,8 +1632,9 @@ class samr(RPCService):
                 self.OffsetGroup = 0
                 self.OffsetSacl = 0
                 self.OffsetDacl = 20
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_small(self.Revision)
@@ -1636,25 +1648,25 @@ class samr(RPCService):
                 b = samr.ACL(self.__packer)
                 b.pack()
 
-
-    class SAMPR_SR_SECURITY_DESCRIPTOR(object):
+    class SAMPR_SR_SECURITY_DESCRIPTOR:
         # 2.2.3.11 SAMPR_SR_SECURITY_DESCRIPTOR
         #
         # http://msdn.microsoft.com/en-us/library/cc245537%28v=prot.10%29.aspx
         #
-        #typedef struct _SAMPR_SR_SECURITY_DESCRIPTOR {
+        # typedef struct _SAMPR_SR_SECURITY_DESCRIPTOR {
         #  [range(0, 256 * 1024)] unsigned long Length;
         #  [size_is(Length)] unsigned char* SecurityDescriptor;
-        #} SAMPR_SR_SECURITY_DESCRIPTOR,
+        # } SAMPR_SR_SECURITY_DESCRIPTOR,
         # *PSAMPR_SR_SECURITY_DESCRIPTOR;
 
         def __init__(self, p, c=0):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Length = c
                 self.Pointer = 0xd1b00
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 if self.Length == 0:
@@ -1670,12 +1682,12 @@ class samr(RPCService):
                     b = samr.SECURITY_DESCRIPTOR(self.__packer)
                     b.pack()
 
-    class SAMPR_USER_ALL_INFORMATION(object):
+    class SAMPR_USER_ALL_INFORMATION:
         # 2.2.7.6 SAMPR_USER_ALL_INFORMATION
         #
         # http://msdn.microsoft.com/en-us/library/cc245622%28v=prot.10%29.aspx
         #
-        #typedef struct _SAMPR_USER_ALL_INFORMATION {
+        # typedef struct _SAMPR_USER_ALL_INFORMATION {
         #  OLD_LARGE_INTEGER LastLogon;
         #  OLD_LARGE_INTEGER LastLogoff;
         #  OLD_LARGE_INTEGER PasswordLastSet;
@@ -1709,12 +1721,12 @@ class samr(RPCService):
         #  unsigned char NtPasswordPresent;
         #  unsigned char PasswordExpired;
         #  unsigned char PrivateDataSensitive;
-        #} SAMPR_USER_ALL_INFORMATION,
+        # } SAMPR_USER_ALL_INFORMATION,
         # *PSAMPR_USER_ALL_INFORMATION;
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.LastLogon = 0
                 self.LastLogoff = 0
                 # Last Password Change = Apr 20,2011 07:32:44 78125000
@@ -1739,8 +1751,9 @@ class samr(RPCService):
                 self.PasswordExpired = 0
                 self.PrivateDataSensitive = 0
 
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 raise NotImplementedError
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_hyper(self.LastLogon)
@@ -1781,16 +1794,15 @@ class samr(RPCService):
                 self.__packer.pack_small(self.PrivateDataSensitive)
 
                 for j in range(len(self.Buffer)):
-                    self.__packer.pack_string(
-                        self.Buffer[j].encode('utf16')[2:])
-                self.__packer.pack_long(int(self.UnitsPerWeek*60/8))
+                    self.__packer.pack_string(self.Buffer[j].encode('utf16')[2:])
+                self.__packer.pack_long(int(self.UnitsPerWeek* 60 /8 ) )
                 self.__packer.pack_long(0)
-                self.__packer.pack_long(int(self.UnitsPerWeek/8))
+                self.__packer.pack_long(int(self.UnitsPerWeek/8 ) )
 
-                for l in range(int(self.UnitsPerWeek/8)):
+                for l in range(int(self.UnitsPerWeek/8 ) ):
                     self.__packer.pack_small(self.LogonHours)
 
-    class SAMPR_PSID_ARRAY(object):
+    class SAMPR_PSID_ARRAY:
         # 2.2.3.6 SAMPR_PSID_ARRAY
         #
         # http://msdn.microsoft.com/en-us/library/cc245548%28v=prot.10%29.aspx
@@ -1798,24 +1810,24 @@ class samr(RPCService):
         # typedef struct _SAMPR_PSID_ARRAY {
         #  [range(0,1024)] unsigned long Count;
         #  [size_is(Count)] PSAMPR_SID_INFORMATION Sids;
-        #} SAMPR_PSID_ARRAY,
+        # } SAMPR_PSID_ARRAY,
         # *PSAMPR_PSID_ARRAY;
 
         # 2.2.3.5 SAMPR_SID_INFORMATION
         #
-        #http://msdn.microsoft.com/en-us/library/cc245547%28v=prot.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245547%28v=prot.10%29.aspx
         #
         # typedef struct _SAMPR_SID_INFORMATION {
         #  PRPC_SID SidPointer;
-        #} SAMPR_SID_INFORMATION,
+        # } SAMPR_SID_INFORMATION,
         # *PSAMPR_SID_INFORMATION;
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Count1 = 0
                 self.Count2 = 0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
 
                 self.Count1 = self.__packer.unpack_long()
                 for i in range(int(self.Count1)):
@@ -1825,8 +1837,9 @@ class samr(RPCService):
                     Sids = samr.RPC_SID(self.__packer)
 
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 raise NotImplementedError
+
     ops = {
         1: "Close",
         3: "QuerySecurityObject",
@@ -1912,8 +1925,7 @@ class samr(RPCService):
         Revision = x.unpack_long()
         SupportedFeatures = x.unpack_long()
 
-        rpclog.debug("Revision %i SupportedFeatures %i" %
-                     (Revision, SupportedFeatures))
+        rpclog.debug("Revision %i SupportedFeatures %i" % (Revision, SupportedFeatures))
 
         r = ndrlib.Packer()
 
@@ -1935,15 +1947,15 @@ class samr(RPCService):
 
     @classmethod
     def handle_QuerySecurityObject(cls, con, p):
-        #3.1.5.12.2 SamrQuerySecurityObject (Opnum 3)
+        # 3.1.5.12.2 SamrQuerySecurityObject (Opnum 3)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245718%28v=PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245718%28v=PROT.10%29.aspx
         #
-        #long SamrQuerySecurityObject(
+        # long SamrQuerySecurityObject(
         #  [in] SAMPR_HANDLE ObjectHandle,
         #  [in] SECURITY_INFORMATION SecurityInformation,
         #  [out] PSAMPR_SR_SECURITY_DESCRIPTOR* SecurityDescriptor
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         ObjectHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("ObjectHandle %s" % ObjectHandle)
@@ -1956,12 +1968,11 @@ class samr(RPCService):
         # Pointer to struct _SAMPR_SR_SECURITY_DESCRIPTOR
         r.pack_pointer(0xbbe58)
 
-        # FIXME: currently length is hardcoded as 48, make it dynamic if
-        # necessary
+        # FIXME: currently length is hardcoded as 48, make it dynamic if necessary
         Length = 48
         r.pack_long(Length)
 
-        s = samr.SAMPR_SR_SECURITY_DESCRIPTOR(r,Length)
+        s = samr.SAMPR_SR_SECURITY_DESCRIPTOR(r, Length)
         s.pack()
 
         r.pack_long(0)
@@ -1970,17 +1981,17 @@ class samr(RPCService):
 
     @classmethod
     def handle_EnumDomains(cls, con, p):
-        #3.1.5.2.1 SamrEnumerateDomainsInSamServer (Opnum 6)
+        # 3.1.5.2.1 SamrEnumerateDomainsInSamServer (Opnum 6)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245755%28v=PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245755%28v=PROT.10%29.aspx
         #
-        #long SamrEnumerateDomainsInSamServer(
+        # long SamrEnumerateDomainsInSamServer(
         #   [in] SAMPR_HANDLE ServerHandle,
         #   [in, out] unsigned long* EnumerationContext,
         #   [out] PSAMPR_ENUMERATION_BUFFER* Buffer,
         #   [in] unsigned long PreferedMaximumLength,
         #   [out] unsigned long* CountReturned
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         ServerHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("ServerHandle %s" % ServerHandle)
@@ -2000,7 +2011,7 @@ class samr(RPCService):
 
         # SAMPR_ENUMERATION_BUFFER Buffer
         s = samr.SAMPR_ENUMERATION_BUFFER(r)
-        s.Buffer = ['HOMEUSER-3AF6FE','Builtin']
+        s.Buffer = ['HOMEUSER-3AF6FE', 'Builtin']
         s.EntriesRead = len(s.Buffer)
         s.pack()
 
@@ -2012,26 +2023,26 @@ class samr(RPCService):
 
     @classmethod
     def handle_LookupDomain(cls, con, p):
-        #3.1.5.11.1 SamrLookupDomainInSamServer (Opnum 5)
+        # 3.1.5.11.1 SamrLookupDomainInSamServer (Opnum 5)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245711%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245711%28v=PROT.13%29.aspx
         #
-        #long SamrLookupDomainInSamServer(
-        #[in] SAMPR_HANDLE ServerHandle,
-        #[in] PRPC_UNICODE_STRING Name,
-        #[out] PRPC_SID* DomainId
-        #);
+        # long SamrLookupDomainInSamServer(
+        # [in] SAMPR_HANDLE ServerHandle,
+        # [in] PRPC_UNICODE_STRING Name,
+        # [out] PRPC_SID* DomainId
+        # );
         x = ndrlib.Unpacker(p.StubData)
         ServerHandle = samr.SAMPR_HANDLE(x)
         Name = samr.RPC_UNICODE_STRING(x)
         r = ndrlib.Packer()
-        r.pack_pointer(0x0da260)   #same as EnumDomain
+        r.pack_pointer(0x0da260)  # same as EnumDomain
 
         # http://technet.microsoft.com/en-us/library/cc778824%28WS.10%29.aspx
         # example the SID for the built-in Administrators group : S-1-5-32-544
         DomainId = samr.RPC_SID(r)
         DomainId.Value = 'NT_AUTHORITY'
-        DomainId.SubAuthority = ['32','544']
+        DomainId.SubAuthority = ['32', '544']
         DomainId.SubAuthorityCount = len(DomainId.SubAuthority)
 
         # Maxcount, needed as the element of NDR array
@@ -2075,18 +2086,18 @@ class samr(RPCService):
 
     @classmethod
     def handle_EnumDomainUsers(cls, con, p):
-        #3.1.5.2.5 SamrEnumerateUsersInDomain (Opnum 13)
+        # 3.1.5.2.5 SamrEnumerateUsersInDomain (Opnum 13)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245759%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245759%28v=PROT.13%29.aspx
         #
-        #long SamrEnumerateUsersInDomain(
-        #[in] SAMPR_HANDLE DomainHandle,
-        #[in, out] unsigned long* EnumerationContext,
-        #[in] unsigned long UserAccountControl,
-        #[out] PSAMPR_ENUMERATION_BUFFER* Buffer,
-        #[in] unsigned long PreferedMaximumLength,
-        #[out] unsigned long* CountReturned
-        #)
+        # long SamrEnumerateUsersInDomain(
+        # [in] SAMPR_HANDLE DomainHandle,
+        # [in, out] unsigned long* EnumerationContext,
+        # [in] unsigned long UserAccountControl,
+        # [out] PSAMPR_ENUMERATION_BUFFER* Buffer,
+        # [in] unsigned long PreferedMaximumLength,
+        # [out] unsigned long* CountReturned
+        # )
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2108,7 +2119,7 @@ class samr(RPCService):
 
         # SAMPR_ENUMERATION_BUFFER Buffer
         s = samr.SAMPR_ENUMERATION_BUFFER(r)
-        s.Buffer = ['Administrator','Guest','HelpAssistant','SUPPORT_388945a0']
+        s.Buffer = ['Administrator', 'Guest', 'HelpAssistant', 'SUPPORT_388945a0']
         s.EntriesRead = len(s.Buffer)
         s.pack()
 
@@ -2120,15 +2131,15 @@ class samr(RPCService):
 
     @classmethod
     def handle_GetAliasMembership(cls, con, p):
-        #3.1.5.9.2 SamrGetAliasMembership (Opnum 16)
+        # 3.1.5.9.2 SamrGetAliasMembership (Opnum 16)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245816%28v=prot.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245816%28v=prot.10%29.aspx
         #
-        #long SamrGetAliasMembership(
+        # long SamrGetAliasMembership(
         #  [in] SAMPR_HANDLE DomainHandle,
         #  [in] PSAMPR_PSID_ARRAY SidArray,
         #  [out] PSAMPR_ULONG_ARRAY Membership
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2152,18 +2163,18 @@ class samr(RPCService):
 
     @classmethod
     def handle_LookupNamesInDomain(cls, con, p):
-        #3.1.5.11.2 SamrLookupNamesInDomain (Opnum 17)
+        # 3.1.5.11.2 SamrLookupNamesInDomain (Opnum 17)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245712%28v=prot.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245712%28v=prot.10%29.aspx
         #
-        #long SamrLookupNamesInDomain(
+        # long SamrLookupNamesInDomain(
         #  [in] SAMPR_HANDLE DomainHandle,
         #  [in, range(0,1000)] unsigned long Count,
         #  [in, size_is(1000), length_is(Count)]
         #    RPC_UNICODE_STRING Names[*],
         #  [out] PSAMPR_ULONG_ARRAY RelativeIds,
         #  [out] PSAMPR_ULONG_ARRAY Use
-        #)
+        # )
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2179,7 +2190,7 @@ class samr(RPCService):
         rpclog.debug("Offset %i" % Offset)
         ActualCount = x.unpack_long()
         rpclog.debug("ActualCount %i" % ActualCount)
-        Names = samr.RPC_UNICODE_STRING(x,Count)
+        Names = samr.RPC_UNICODE_STRING(x, Count)
 
         global LookupName
         LookupName = Names.Buffer.decode('UTF-16')
@@ -2225,16 +2236,16 @@ class samr(RPCService):
 
     @classmethod
     def handle_OpenUser(cls, con, p):
-        #3.1.5.1.9 SamrOpenUser (Opnum 34)
+        # 3.1.5.1.9 SamrOpenUser (Opnum 34)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245752%28v=prot.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245752%28v=prot.10%29.aspx
         #
-        #long SamrOpenUser(
+        # long SamrOpenUser(
         #  [in] SAMPR_HANDLE DomainHandle,
         #  [in] unsigned long DesiredAccess,
         #  [in] unsigned long UserId,
         #  [out] SAMPR_HANDLE* UserHandle
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2258,16 +2269,16 @@ class samr(RPCService):
 
     @classmethod
     def handle_QueryInformationUser(cls, con, p):
-        #3.1.5.5.6 SamrQueryInformationUser (Opnum 36)
+        # 3.1.5.5.6 SamrQueryInformationUser (Opnum 36)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245786%28v=prot.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245786%28v=prot.10%29.aspx
         #
-        #long SamrQueryInformationUser(
+        # long SamrQueryInformationUser(
         #  [in] SAMPR_HANDLE UserHandle,
         #  [in] USER_INFORMATION_CLASS UserInformationClass,
         #  [out, switch_is(UserInformationClass)]
         #    PSAMPR_USER_INFO_BUFFER* Buffer
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         UserHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("UserHandle %s" % UserHandle)
@@ -2276,8 +2287,8 @@ class samr(RPCService):
         rpclog.debug("UserInformationClass %i" % UserInformationClass)
 
         r = ndrlib.Packer()
-        #typedef  enum _USER_INFORMATION_CLASS
-        #{
+        # typedef  enum _USER_INFORMATION_CLASS
+        # {
         #  UserGeneralInformation = 1,
         #  UserPreferencesInformation = 2,
         #  UserLogonInformation = 3,
@@ -2301,7 +2312,7 @@ class samr(RPCService):
         #  UserInternal5Information = 24,
         #  UserInternal4InformationNew = 25,
         #  UserInternal5InformationNew = 26
-        #} USER_INFORMATION_CLASS,
+        # } USER_INFORMATION_CLASS,
         # *PUSER_INFORMATION_CLASS;
 
         # Pointer to the USER_INFORMATION_CLASS
@@ -2311,14 +2322,13 @@ class samr(RPCService):
             r.pack_long(UserInformationClass)
             # SAMPR_USER_ALL_INFORMATION
             s = samr.SAMPR_USER_ALL_INFORMATION(r)
-            rpclog.debug("LookupName %s" % cls.LookupName)
+            rpclog.debug("LookupName %s" % LookupName)
 
-            if cls.LookupName in __userinfo__:
-                data = __userinfo__[cls.LookupName]
+            if LookupName in __userinfo__:
+                data = __userinfo__[LookupName]
                 rid  = data["RID"]
                 comment = data["comment"]
-                s.Buffer = [
-                    cls.LookupName,'','','','','',comment,'','','','','','']
+                s.Buffer = [LookupName, '', '', '', '', '', comment, '', '', '', '', '', '']
                 s.UserID = rid
                 s.pack()
 
@@ -2331,29 +2341,28 @@ class samr(RPCService):
 
     @classmethod
     def handle_GetGroupsForUser (cls, con, p):
-        #3.1.5.9.1 SamrGetGroupsForUser (Opnum 39)
+        # 3.1.5.9.1 SamrGetGroupsForUser (Opnum 39)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245815%28v=prot.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245815%28v=prot.10%29.aspx
         #
-        #long SamrGetGroupsForUser(
+        # long SamrGetGroupsForUser(
         #  [in] SAMPR_HANDLE UserHandle,
         #  [out] PSAMPR_GET_GROUPS_BUFFER* Groups
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         UserHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("UserHandle %s" % UserHandle)
 
         # 2.2.3.13 SAMPR_GET_GROUPS_BUFFER
         # http://msdn.microsoft.com/en-us/library/cc245539%28v=prot.10%29.aspx
-        #typedef struct _SAMPR_GET_GROUPS_BUFFER {
+        # typedef struct _SAMPR_GET_GROUPS_BUFFER {
         #  unsigned long MembershipCount;
         #  [size_is(MembershipCount)] PGROUP_MEMBERSHIP Groups;
-        #} SAMPR_GET_GROUPS_BUFFER,
+        # } SAMPR_GET_GROUPS_BUFFER,
         # *PSAMPR_GET_GROUPS_BUFFER;
 
         # Note: Information about PGROUP_MEMBERSHIP struct not found on MDSN.
-        # The following response is made by refering to Microsoft Network
-        # Monitor
+        # The following response is made by refering to Microsoft Network Monitor
 
         r = ndrlib.Packer()
         r.pack_pointer(0xc6298)
@@ -2373,11 +2382,11 @@ class samr(RPCService):
 
     @classmethod
     def handle_QueryDisplayInformation(cls, con, p):
-        #3.1.5.3.3 SamrQueryDisplayInformation (Opnum 40)
+        # 3.1.5.3.3 SamrQueryDisplayInformation (Opnum 40)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245763%28PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245763%28PROT.10%29.aspx
         #
-        #long SamrQueryDisplayInformation(
+        # long SamrQueryDisplayInformation(
         #  [in] SAMPR_HANDLE DomainHandle,
         #  [in] DOMAIN_DISPLAY_INFORMATION DisplayInformationClass,
         #  [in] unsigned long Index,
@@ -2387,7 +2396,7 @@ class samr(RPCService):
         #  [out] unsigned long* TotalReturned,
         #  [out, switch_is(DisplayInformationClass)]
         #    PSAMPR_DISPLAY_INFO_BUFFER Buffer
-        #);
+        # );
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2410,13 +2419,13 @@ class samr(RPCService):
         # unsigned long* TotalReturned
         r.pack_long(30)
 
-        if DisplayInformationClass == 1 :
+        if DisplayInformationClass == 1:
             r.pack_long(DisplayInformationClass)
             # SAMPR_DOMAIN_DISPLAY_USER_BUFFER
             s = samr.SAMPR_DOMAIN_DISPLAY_USER_BUFFER(r)
-            s.Buffer = ['Administrator','Builtin','Full Name','Guest','Builtin','Full Name',
-                        'HelpAssistant','Builtin','Full Name','SUPPORT_388945a0','Builtin','Full Name']
-            s.EntriesRead = int(len(s.Buffer)/3)
+            s.Buffer = ['Administrator', 'Builtin', 'Full Name', 'Guest', 'Builtin', 'Full Name', 'HelpAssistant',
+                        'Builtin', 'Full Name', 'SUPPORT_388945a0', 'Builtin', 'Full Name']
+            s.EntriesRead = int(len(s.Buffer) / 3)
             s.pack()
 
         r.pack_long(0)
@@ -2425,16 +2434,16 @@ class samr(RPCService):
 
     @classmethod
     def handle_QueryInformationDomain2(cls, con, p):
-        #3.1.5.5.1 SamrQueryInformationDomain2 (Opnum 46)
+        # 3.1.5.5.1 SamrQueryInformationDomain2 (Opnum 46)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245773%28PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245773%28PROT.13%29.aspx
         #
-        #long SamrQueryInformationDomain2(
+        # long SamrQueryInformationDomain2(
         #  [in] SAMPR_HANDLE DomainHandle,
         #  [in] DOMAIN_INFORMATION_CLASS DomainInformationClass,
         #  [out, switch_is(DomainInformationClass)]
         #    PSAMPR_DOMAIN_INFO_BUFFER* Buffer
-        #)
+        # )
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2443,8 +2452,8 @@ class samr(RPCService):
         rpclog.debug("DisplayInformationClass %i" % DisplayInformationClass)
 
         r = ndrlib.Packer()
-        #typedef
-        #[switch_type(DOMAIN_INFORMATION_CLASS)]
+        # typedef
+        # [switch_type(DOMAIN_INFORMATION_CLASS)]
         #  union _SAMPR_DOMAIN_INFO_BUFFER {
         #  [case(DomainPasswordInformation)]
         #    DOMAIN_PASSWORD_INFORMATION Password;
@@ -2470,7 +2479,7 @@ class samr(RPCService):
         #    SAMPR_DOMAIN_LOCKOUT_INFORMATION Lockout;
         #  [case(DomainModifiedInformation2)]
         #    DOMAIN_MODIFIED_INFORMATION2 Modified2;
-        #} SAMPR_DOMAIN_INFO_BUFFER,
+        # } SAMPR_DOMAIN_INFO_BUFFER,
         # *PSAMPR_DOMAIN_INFO_BUFFER;
 
         # Pointer to the SAMPR_DOMAIN_INFO_BUFFER
@@ -2479,13 +2488,13 @@ class samr(RPCService):
         if DisplayInformationClass == 1:
             # 2.2.4.5 DOMAIN_PASSWORD_INFORMATION
             # http://msdn.microsoft.com/en-us/library/cc245575%28PROT.13%29.aspx
-            #typedef struct _DOMAIN_PASSWORD_INFORMATION {
+            # typedef struct _DOMAIN_PASSWORD_INFORMATION {
             #  unsigned short MinPasswordLength;
             #  unsigned short PasswordHistoryLength;
             #  unsigned long PasswordProperties;
             #  OLD_LARGE_INTEGER MaxPasswordAge;
             #  OLD_LARGE_INTEGER MinPasswordAge;
-            #} DOMAIN_PASSWORD_INFORMATION,
+            # } DOMAIN_PASSWORD_INFORMATION,
             # *PDOMAIN_PASSWORD_INFORMATION;
 
             r.pack_long(DisplayInformationClass)
@@ -2497,28 +2506,27 @@ class samr(RPCService):
         elif DisplayInformationClass == 8:
             # 2.2.4.8 DOMAIN_MODIFIED_INFORMATION
             # http://msdn.microsoft.com/en-us/library/cc245578%28PROT.10%29.aspx
-            #typedef struct _DOMAIN_MODIFIED_INFORMATION {
+            # typedef struct _DOMAIN_MODIFIED_INFORMATION {
             #  OLD_LARGE_INTEGER DomainModifiedCount;
             #  OLD_LARGE_INTEGER CreationTime;
-            #} DOMAIN_MODIFIED_INFORMATION,
+            # } DOMAIN_MODIFIED_INFORMATION,
             # *PDOMAIN_MODIFIED_INFORMATION;
 
             r.pack_long(DisplayInformationClass)
             r.pack_hyper(10)
-            # Jun 25,2010 03:40:46.078125000
-            r.pack_raw(b'\xc2\x1e\xdc\x23\xd5\x13\xcb\x01')
+            r.pack_raw(b'\xc2\x1e\xdc\x23\xd5\x13\xcb\x01')  # Jun 25,2010 03:40:46.078125000
 
         elif DisplayInformationClass == 12:
             # 2.2.4.15 SAMPR_DOMAIN_LOCKOUT_INFORMATION
             # http://msdn.microsoft.com/en-us/library/cc245569%28PROT.13%29.aspx
-            #typedef struct _SAMPR_DOMAIN_LOCKOUT_INFORMATION {
+            # typedef struct _SAMPR_DOMAIN_LOCKOUT_INFORMATION {
             #  LARGE_INTEGER LockoutDuration;
             #  LARGE_INTEGER LockoutObservationWindow;
             #  unsigned short LockoutThreshold;
-            #} SAMPR_DOMAIN_LOCKOUT_INFORMATION,
+            # } SAMPR_DOMAIN_LOCKOUT_INFORMATION,
             # *PSAMPR_DOMAIN_LOCKOUT_INFORMATION;
             r.pack_long(DisplayInformationClass)
-            r.pack_hyper(18446744055709551616) #windows XP give this value
+            r.pack_hyper(18446744055709551616)  # windows XP give this value
             r.pack_hyper(18446744055709551616)
             r.pack_short(0)
 
@@ -2528,17 +2536,17 @@ class samr(RPCService):
 
     @classmethod
     def handle_EnumerateAliasesInDomain(cls, con, p):
-        #3.1.5.2.4 SamrEnumerateAliasesInDomain (Opnum 15)
+        # 3.1.5.2.4 SamrEnumerateAliasesInDomain (Opnum 15)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245758%28PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245758%28PROT.10%29.aspx
         #
-        #long SamrEnumerateAliasesInDomain(
+        # long SamrEnumerateAliasesInDomain(
         #  [in] SAMPR_HANDLE DomainHandle,
         #  [in, out] unsigned long* EnumerationContext,
         #  [out] PSAMPR_ENUMERATION_BUFFER* Buffer,
         #  [in] unsigned long PreferedMaximumLength,
         #  [out] unsigned long* CountReturned
-        #)
+        # )
         x = ndrlib.Unpacker(p.StubData)
         DomainHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("DomainHandle %s" % DomainHandle)
@@ -2557,7 +2565,7 @@ class samr(RPCService):
 
         # SAMPR_ENUMERATION_BUFFER Buffer
         s = samr.SAMPR_ENUMERATION_BUFFER(r)
-        s.Buffer = ['Administrator','Guest']
+        s.Buffer = ['Administrator', 'Guest']
         s.EntriesRead = len(s.Buffer)
         s.pack()
 
@@ -2569,24 +2577,25 @@ class samr(RPCService):
 
     @classmethod
     def handle_Close(cls, con, p):
-        #3.1.5.13.1 SamrCloseHandle (Opnum 1)
+        # 3.1.5.13.1 SamrCloseHandle (Opnum 1)
         #
-        #http://msdn.microsoft.com/en-us/library/cc245722%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc245722%28v=PROT.13%29.aspx
         #
-        #long SamrCloseHandle(
-        #[in, out] SAMPR_HANDLE* SamHandle
-        #);
+        # long SamrCloseHandle(
+        # [in, out] SAMPR_HANDLE* SamHandle
+        # );
         x = ndrlib.Unpacker(p.StubData)
         SamHandle = samr.SAMPR_HANDLE(x)
         rpclog.debug("SamHandle %s" % SamHandle)
 
         r = ndrlib.Packer()
         s = samr.SAMPR_HANDLE(r)
-        s.Handle =  b'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+        s.Handle = b'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
         s.pack()
         r.pack_long(0)
 
         return r.get_buffer()
+
 
 class SceSvc(RPCService):
     uuid = UUID('93149ca2-973b-11d1-8c39-00c04fb984f9').hex
@@ -2609,22 +2618,22 @@ class spoolss(RPCService):
 
     }
 
-    class DOC_INFO_1(object):
+    class DOC_INFO_1:
         # DOC_INFO_1 Structure
         #
         # http://msdn.microsoft.com/en-us/library/dd162471%28v=VS.85%29.aspx
         #
-        #typedef struct _DOC_INFO_1 {
+        # typedef struct _DOC_INFO_1 {
         #  LPTSTR pDocName;
         #  LPTSTR pOutputFile;
         #  LPTSTR pDatatype;
-        #} DOC_INFO_1;
+        # } DOC_INFO_1;
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 pass
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Level = self.__packer.unpack_long()
                 self.Pointer = self.__packer.unpack_pointer()
                 self.pDocName = self.__packer.unpack_pointer()
@@ -2632,65 +2641,62 @@ class spoolss(RPCService):
                 self.pDatatype = self.__packer.unpack_pointer()
                 self.DocName = self.__packer.unpack_string()
                 self.OutputFile = self.__packer.unpack_string()
-                #self.DataType = self.__packer.unpack_string()
+                # self.DataType = self.__packer.unpack_string()
 
-#				rpclog.debug("DocName %s OutputFile %s" %(self.DocName,self.OutputFile))
+                #				rpclog.debug("DocName %s OutputFile %s" %(self.DocName,self.OutputFile))
 
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 pass
 
-    class PRINTER_INFO_1(object):
+    class PRINTER_INFO_1:
         # PRINTER_INFO_1 Structure
         #
         # http://msdn.microsoft.com/en-us/library/dd162844%28v=VS.85%29.aspx
         #
-        #typedef struct _PRINTER_INFO_1 {
+        # typedef struct _PRINTER_INFO_1 {
         #  DWORD  Flags;
         #  LPTSTR pDescription;
         #  LPTSTR pName;
         #  LPTSTR pComment;
-        #} PRINTER_INFO_1, *PPRINTER_INFO_1;
+        # } PRINTER_INFO_1, *PPRINTER_INFO_1;
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Flags = 0x00018000
                 self.Buffer = ''
                 self.Buffersize = 0
                 self.Offset = 0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_pointer(self.Flags)
 
-                # self.Offset is the distance of the string count from the end
-                # of PRINTER_INFO_1 buffer. To count the distance of the string
-                # from the start of PRINTER_INFO_1 buffer,
-                # self.Buffersize - self offset needed
+                # self.Offset is the distance of the string count from the end of PRINTER_INFO_1 buffer. To count the distance of the string from the start of PRINTER_INFO_1 buffer, self.Buffersize - self offset needed
                 for j in range(len(self.Buffer)):
                     count = 0
                     count = len(self.Buffer) - j - 1
-                    self.Offset = self.Offset + 2*len(self.Buffer[count])
-                    self.__packer.pack_long(self.Buffersize-self.Offset)
+                    self.Offset = self.Offset + 2 * len(self.Buffer[count])
+                    self.__packer.pack_long(self.Buffersize - self.Offset)
 
                 for i in range(len(self.Buffer)):
-
                     self.__packer.pack_raw(self.Buffer[i].encode('utf16')[2:])
+
         def size(self):
-            size = 4 + 4*len(self.Buffer) + 2* \
-                (sum([len(x) for x in self.Buffer]))
-            rpclog.debug ("rpclog.debugER_INFO_1 size %i" % size)
+            size = 4 + 4 * len(self.Buffer) + 2 * (sum([len(x) for x in self.Buffer]))
+            rpclog.debug("rpclog.debugER_INFO_1 size %i" % size)
             return size
 
     @classmethod
-    def handle_EnumPrinters (cls, con, p):
-        #EnumPrinters Function
+    def handle_EnumPrinters(cls, con, p):
+        # EnumPrinters Function
         #
-        #http://msdn.microsoft.com/en-us/library/dd162692%28VS.85%29.aspx
+        # http://msdn.microsoft.com/en-us/library/dd162692%28VS.85%29.aspx
         #
-        #BOOL EnumPrinters(
+        # BOOL EnumPrinters(
         #  __in   DWORD Flags,
         #  __in   LPTSTR Name,
         #  __in   DWORD Level,
@@ -2698,7 +2704,7 @@ class spoolss(RPCService):
         #  __in   DWORD cbBuf,
         #  __out  LPDWORD pcbNeeded,
         #  __out  LPDWORD pcReturned
-        #);
+        # );
 
         p = ndrlib.Unpacker(p.StubData)
         Flags = p.unpack_long()
@@ -2707,8 +2713,7 @@ class spoolss(RPCService):
         Pointer = p.unpack_pointer()
         cbBuf = p.unpack_long()
 
-        rpclog.debug("Flags %s Name %s Level %i cbBuf %i " %
-                     (Flags, Name, Level, cbBuf))
+        rpclog.debug("Flags %s Name %s Level %i cbBuf %i " % (Flags, Name, Level, cbBuf))
 
         r = ndrlib.Packer()
         # Pointer to PRINTER_INFO_X buffer
@@ -2721,8 +2726,9 @@ class spoolss(RPCService):
         # 'Windows NT Remote Printers' need for msf fingerprinting OS language as 'English version'
         # https://www.metasploit.com/redmine/projects/framework/repository/revisions/8941/entry/lib/msf/core/exploit/smb.rb#L396
 
-        a.Buffer = ['Internet URL Printers\0','Windows NT Internet Provider\0','Windows NT Internet Printing\0','Remote Printers\0','Windows NT Remote Printers\0',
-                    'Microsoft Windows Network\0','Locally Connected Printers\0','Windows NT Local Print Providor\0','Windows NT Local Printers\0']
+        a.Buffer = ['Internet URL Printers\0', 'Windows NT Internet Provider\0', 'Windows NT Internet Printing\0',
+                    'Remote Printers\0', 'Windows NT Remote Printers\0', 'Microsoft Windows Network\0',
+                    'Locally Connected Printers\0', 'Windows NT Local Print Providor\0', 'Windows NT Local Printers\0']
         a.Buffersize = a.size()
 
         if Level == 1 and cbBuf != 0:
@@ -2730,7 +2736,7 @@ class spoolss(RPCService):
             a.pack()
 
             r.pack_long(a.Buffersize)
-            r.pack_long(3) #pcReturned, default in windows xp is 3
+            r.pack_long(3)  # pcReturned, default in windows xp is 3
             r.pack_long(0)
         else:
             # this need to trick metasploit ms08-067 exploit
@@ -2743,15 +2749,15 @@ class spoolss(RPCService):
 
     @classmethod
     def handle_OpenPrinter(cls, con, p):
-        #OpenPrinter Function
+        # OpenPrinter Function
         #
-        #http://msdn.microsoft.com/en-us/library/dd162751%28v=VS.85%29.aspx
+        # http://msdn.microsoft.com/en-us/library/dd162751%28v=VS.85%29.aspx
         #
-        #BOOL OpenPrinter(
+        # BOOL OpenPrinter(
         #  __in   LPTSTR pPrinterName,
         #  __out  LPHANDLE phPrinter,
         #  __in   LPPRINTER_DEFAULTS pDefault
-        #);
+        # );
 
         x = ndrlib.Unpacker(p.StubData)
         pPrinterName = x.unpack_pointer()
@@ -2768,8 +2774,8 @@ class spoolss(RPCService):
         DesiredAccess = x.unpack_long()
         print("DesiredAccess %x" % DesiredAccess)
 
-        #Below is the ClientInfo structure which showed in
-        #Microsoft Network Monitor, but I cant find the correct doc to refer
+        # Below is the ClientInfo structure which showed in
+        # Microsoft Network Monitor, but I cant find the correct doc to refer
         Level = x.unpack_long()
         SwitchValue = x.unpack_long()
         Pointer = x.unpack_pointer()
@@ -2792,18 +2798,17 @@ class spoolss(RPCService):
         r.pack_long(0)
         return r.get_buffer()
 
-
     @classmethod
     def handle_StartDocPrinter(cls, con, p):
-        #StartDocPrinter Function
+        # StartDocPrinter Function
         #
-        #http://msdn.microsoft.com/en-us/library/dd145115%28v=VS.85%29.aspx
+        # http://msdn.microsoft.com/en-us/library/dd145115%28v=VS.85%29.aspx
         #
-        #DWORD StartDocPrinter(
+        # DWORD StartDocPrinter(
         #  __in  HANDLE hPrinter,
         #  __in  DWORD Level,
         #  __in  LPBYTE pDocInfo
-        #);
+        # );
 
         x = ndrlib.Unpacker(p.StubData)
         hPrinter = x.unpack_raw(20)
@@ -2827,7 +2832,6 @@ class spoolss(RPCService):
             i.url = "spoolss://" + con.remote.host + '/' + OutputFile
             i.report()
 
-
         r = ndrlib.Packer()
         # Job ID
         r.pack_long(3)
@@ -2838,22 +2842,22 @@ class spoolss(RPCService):
 
     @classmethod
     def handle_EndDocPrinter(cls, con, p):
-        r=ndrlib.Packer()
+        r = ndrlib.Packer()
         r.pack_long(0)
         return r.get_buffer()
 
     @classmethod
     def handle_WritePrinter(cls, con, p):
-        #WritePrinter Function
+        # WritePrinter Function
         #
-        #http://msdn.microsoft.com/en-us/library/dd145226%28v=VS.85%29.aspx
+        # http://msdn.microsoft.com/en-us/library/dd145226%28v=VS.85%29.aspx
         #
-        #BOOL WritePrinter(
+        # BOOL WritePrinter(
         #  __in   HANDLE hPrinter,
         #  __in   LPVOID pBuf,
         #  __in   DWORD cbBuf,
         #  __out  LPDWORD pcWritten
-        #);
+        # );
 
 
 
@@ -2866,8 +2870,7 @@ class spoolss(RPCService):
         # 0x02 : Last fragment
         # 0x03 : No fragment needed
         #
-        # FIXME actually this defragmentation should be in
-        # smbd.process_dcerpc_packet
+        # FIXME actually this defragmentation should be in smbd.process_dcerpc_packet
 
         if p.PacketFlags == 0:
             con.printer += p.StubData
@@ -2881,16 +2884,8 @@ class spoolss(RPCService):
             hPrinter = x.unpack_raw(20)
             cbBuf = x.unpack_long()
             Buf = x.unpack_raw(cbBuf)
-
-            dionaea_config = g_dionaea.config().get("dionaea")
-            download_dir = dionaea_config.get("download.dir")
-            download_suffix = dionaea_config.get("download.suffix", ".tmp")
-            x = tempfile.NamedTemporaryFile(
-                delete=False,
-                prefix="spoolss-",
-                suffix=download_suffix,
-                dir=download_dir
-            )
+            x = tempfile.NamedTemporaryFile(delete=False, prefix="spoolss-", suffix=".tmp",
+                                            dir=g_dionaea.config()['downloads']['dir'])
             x.write(Buf)
             x.close()
 
@@ -2916,52 +2911,68 @@ class spoolss(RPCService):
             return r.get_buffer()
 
 
-
-
-
-STYPE_DISKTREE = 0x00000000 # Disk drive
-STYPE_PRINTQ   = 0x00000001 # Print queue
-STYPE_DEVICE   = 0x00000002 # Communication device
-STYPE_IPC      = 0x00000003 # Interprocess communication (IPC)
-STYPE_SPECIAL  = 0x80000000 # Special share reserved for interprocess
-# communication (IPC$) or remote administration of the server (ADMIN$).
-# Can also refer to administrative shares such as C$, D$, E$, and so forth.
-STYPE_TEMPORARY= 0x40000000 # A temporary share that is not persisted
-# for creation each time the file server initializes.
+STYPE_DISKTREE = 0x00000000  # Disk drive
+STYPE_PRINTQ = 0x00000001  # Print queue
+STYPE_DEVICE = 0x00000002  # Communication device
+STYPE_IPC = 0x00000003  # Interprocess communication (IPC)
+STYPE_SPECIAL = 0x80000000  # Special share reserved for interprocess communication (IPC$) or remote administration of the server (ADMIN$). Can also refer to administrative shares such as C$, D$, E$, and so forth.
+STYPE_TEMPORARY = 0x40000000  # A temporary share that is not persisted for creation each time the file server initializes.
 
 __shares__ = {
-    'ADMIN$' : {
+    b'ADMIN$': {
         'type': STYPE_DISKTREE,
-        'comment' : 'Remote Admin',
+        'comment': 'Remote Admin',
         'path': 'C:\\Windows'
     },
-    'C$' : {
-        'type': STYPE_DISKTREE|STYPE_SPECIAL,
-        'comment' : 'Default Share',
+    b'C$': {
+        'type': STYPE_DISKTREE | STYPE_SPECIAL,
+        'comment': 'Default Share',
         'path': 'C:\\'
     },
-    'IPC$' : {
+    b'IPC$': {
         'type': STYPE_IPC,
-        'comment' : 'Remote IPC',
+        'comment': 'Remote IPC',
         'path': ''
     },
-    'Printer' : {
-        'type' : STYPE_PRINTQ,
-        'comment' : 'Microsoft XPS Document Writer',
+    b'Printer': {
+        'type': STYPE_PRINTQ,
+        'comment': 'Microsoft XPS Document Writer',
+        'path': '',
+    }
+}
+
+__shares_Samba__ = {
+    b'admin': {
+        'type': STYPE_DISKTREE,
+        'comment': 'Remote Admin',
+        'path': '\\home\\admin'
+    },
+    b'share': {
+        'type': STYPE_DISKTREE,
+        'comment': 'Default Share',
+        'path': '\\share'
+    },
+    b'IPC$': {
+        'type': STYPE_IPC,
+        'comment': 'IPC Service',
+        'path': ''
+    },
+    b'print': {
+        'type': STYPE_PRINTQ,
+        'comment': 'Printer Drivers',
         'path': '',
     }
 }
 
 
-
 class SRVSVC(RPCService):
     """ [MS-SRVS]: Server Service Remote Protocol Specification
 
-    http://msdn.microsoft.com/en-us/library/cc247080%28v=PROT.13%29.aspx
+	http://msdn.microsoft.com/en-us/library/cc247080%28v=PROT.13%29.aspx
 
-    http://download.microsoft.com/download/a/e/6/ae6e4142-aa58-45c6-8dcf-a657e5900cd3/%5BMS-SRVS%5D.pdf
+	http://download.microsoft.com/download/a/e/6/ae6e4142-aa58-45c6-8dcf-a657e5900cd3/%5BMS-SRVS%5D.pdf 
 
-    """
+	"""
     uuid = UUID('4b324fc8-1670-01d3-1278-5a47bf6ee188').hex
     version_major = 0
     version_minor = 0
@@ -2976,12 +2987,12 @@ class SRVSVC(RPCService):
         0x20: "NetPathCompare",
         0x22: "NetNameCanonicalize"
     }
-    vulns  = {
+    vulns = {
         0x1f: "MS08-67",
         0x20: "MS08-67",
     }
 
-    class SRVSVC_HANDLE(object):
+    class SRVSVC_HANDLE:
         # 2.2.1.1 SRVSVC_HANDLE
         #
         # http://msdn.microsoft.com/en-us/library/cc247105%28PROT.10%29.aspx
@@ -2989,38 +3000,40 @@ class SRVSVC(RPCService):
         # 	typedef [handle, string] WCHAR* SRVSVC_HANDLE;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Handle = b''
                 self.Pointer = 0x3a20f2
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Ref = self.__packer.unpack_pointer()
                 self.Handle = self.__packer.unpack_string()
+
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_pointer(self.Pointer)
                 self.__packer.pack_string(self.Handle)
 
-    class SHARE_INFO_0_CONTAINER(object):
+    class SHARE_INFO_0_CONTAINER:
         # 2.2.4.32 SHARE_INFO_0_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247156%28PROT.13%29.aspx
         #
-        #typedef struct _SHARE_INFO_0_CONTAINER {
+        # typedef struct _SHARE_INFO_0_CONTAINER {
         #  DWORD EntriesRead;
         #  [size_is(EntriesRead)] LPSHARE_INFO_0 Buffer;
-        #} SHARE_INFO_0_CONTAINER;
+        # } SHARE_INFO_0_CONTAINER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = 0
                 self.Data = []
                 self.Pointer = 0x23456
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Ptr = self.__packer.unpack_pointer()
                 self.EntriesRead = self.__packer.unpack_long()
                 self.Buffer = self.__packer.unpack_pointer()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 # EntriesRead
                 self.EntriesRead = len(self.Data)
                 self.__packer.pack_long(self.EntriesRead)
@@ -3030,8 +3043,7 @@ class SRVSVC(RPCService):
                 b.MaxCount = self.EntriesRead
                 b.pack()
 
-
-    class SHARE_INFO_1_CONTAINER(object):
+    class SHARE_INFO_1_CONTAINER:
         # 2.2.4.33 SHARE_INFO_1_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247157%28PROT.10%29.aspx
@@ -3042,16 +3054,17 @@ class SRVSVC(RPCService):
         # } SHARE_INFO_1_CONTAINER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = 0
                 self.Data = {}
                 self.Pointer = 0x23456
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Ptr = self.__packer.unpack_pointer()
                 self.EntriesRead = self.__packer.unpack_long()
                 self.Buffer = self.__packer.unpack_pointer()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 # EntriesRead
                 self.EntriesRead = len(self.Data)
                 self.__packer.pack_long(self.EntriesRead)
@@ -3060,38 +3073,38 @@ class SRVSVC(RPCService):
                 b.Data = self.Data
                 b.pack()
 
-
-    class SHARE_INFO_2_CONTAINER(object):
+    class SHARE_INFO_2_CONTAINER:
         # 2.2.4.34 SHARE_INFO_2_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247158%28PROT.13%29.aspx
         #
-        #typedef struct _SHARE_INFO_2_CONTAINER {
+        # typedef struct _SHARE_INFO_2_CONTAINER {
         #  DWORD EntriesRead;
         #  [size_is(EntriesRead)] LPSHARE_INFO_2 Buffer;
-        #} SHARE_INFO_2_CONTAINER,
+        # } SHARE_INFO_2_CONTAINER,
         # *PSHARE_INFO_2_CONTAINER,
         # *LPSHARE_INFO_2_CONTAINER;
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = 0
                 self.Data = {}
                 self.Pointer = 0x23456
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Ptr = self.__packer.unpack_pointer()
                 self.EntriesRead = self.__packer.unpack_long()
                 self.Buffer = self.__packer.unpack_pointer()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = len(self.Data)
-#				self.__packer.pack_long(self.EntriesRead)
+                #				self.__packer.pack_long(self.EntriesRead)
                 # LPSHARE_INFO_2 Buffer
                 b = SRVSVC.SHARE_INFO_2(self.__packer)
                 b.Data = self.Data
                 b.pack()
 
-    class SHARE_INFO_502_CONTAINER(object):
+    class SHARE_INFO_502_CONTAINER:
         # 2.2.4.36 SHARE_INFO_502_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247160%28PROT.13%29.aspx
@@ -3102,17 +3115,18 @@ class SRVSVC(RPCService):
         # } SHARE_INFO_502_CONTAINER,
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = 0
                 self.Data = {}
                 self.Pointer = 0x23456
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.Ctr = self.__packer.unpack_pointer()
                 self.Ptr = self.__packer.unpack_pointer()
                 self.EntriesRead = self.__packer.unpack_long()
                 self.Buffer = self.__packer.unpack_pointer()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.EntriesRead = len(self.Data)
                 self.__packer.pack_long(self.EntriesRead)
                 # SHARE_INFO_502_I Buffer
@@ -3120,41 +3134,40 @@ class SRVSVC(RPCService):
                 b.Data = self.Data
                 b.pack()
 
-    class SHARE_INFO_0(object):
+    class SHARE_INFO_0:
         # 2.2.4.22 SHARE_INFO_0
         #
         # http://msdn.microsoft.com/en-us/library/cc247146%28v=PROT.13%29.aspx
         #
-        #typedef struct _SHARE_INFO_0 {
+        # typedef struct _SHARE_INFO_0 {
         #  [string] wchar_t* shi0_netname;
-        #} SHARE_INFO_0,
+        # } SHARE_INFO_0,
         # *PSHARE_INFO_0,
         # *LPSHARE_INFO_0
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Data = {}
                 self.Pointer = 0x99999
                 self.MaxCount = 0
                 self.Netname_pointer = 0x34567
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_pointer(self.Pointer)
                 # MaxCount, needed as the NDR array
                 self.MaxCount = len(self.Data)
                 self.__packer.pack_long(self.MaxCount)
 
                 for i in range(self.MaxCount):
-                    self.__packer.pack_pointer(self.Netname_pointer) # netname
+                    self.__packer.pack_pointer(self.Netname_pointer)  # netname
                 for j in self.Data:
                     data = self.Data[j]
-                    self.__packer.pack_string_fix(
-                        str(j+'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(j + '\0').encode('utf16')[2:])
 
-
-    class SHARE_INFO_1(object):
+    class SHARE_INFO_1:
         # 2.2.4.23 SHARE_INFO_1
         #
         # http://msdn.microsoft.com/en-us/library/cc247147%28PROT.10%29.aspx
@@ -3171,17 +3184,18 @@ class SRVSVC(RPCService):
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Data = {}
                 self.Pointer = 0x99999
                 self.MaxCount = 0
                 self.Netname_pointer = 0x34567
-                self.Type = 0x00000000 # STYPE_DISKTREE
+                self.Type = 0x00000000  # STYPE_DISKTREE
                 self.Remark_pointer = 0x45678
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_pointer(self.Pointer)
                 # MaxCount, needed as the NDR array
                 self.MaxCount = len(self.Data)
@@ -3189,18 +3203,16 @@ class SRVSVC(RPCService):
 
                 for i in self.Data:
                     data = self.Data[i]
-                    self.__packer.pack_pointer(self.Netname_pointer) # netname
-                    self.__packer.pack_long(data['type']) # type
-                    self.__packer.pack_pointer(self.Remark_pointer) # remark
+                    self.__packer.pack_pointer(self.Netname_pointer)  # netname
+                    self.__packer.pack_long(data['type'])  # type
+                    self.__packer.pack_pointer(self.Remark_pointer)  # remark
 
                 for j in self.Data:
                     data = self.Data[j]
-                    self.__packer.pack_string_fix(
-                        str(j+'\0').encode('utf16')[2:])
-                    self.__packer.pack_string_fix(
-                        str(data['comment']+'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(j + '\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(data['comment'] + '\0').encode('utf16')[2:])
 
-    class SHARE_INFO_502(object):
+    class SHARE_INFO_502:
         # 2.2.4.26 SHARE_INFO_502_I
         #
         # http://msdn.microsoft.com/en-us/library/cc247150%28v=PROT.13%29.aspx
@@ -3216,12 +3228,12 @@ class SRVSVC(RPCService):
         #  [string] WCHAR* shi502_passwd;
         #  DWORD shi502_reserved;
         #  [size_is(shi502_reserved)] unsigned char* shi502_security_descriptor;
-        #} SHARE_INFO_502_I,
+        # } SHARE_INFO_502_I,
         # *PSHARE_INFO_502_I,
         # *LPSHARE_INFO_502_I;
         def __init__(self, p, data=None):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Data = []
                 self.Pointer = 0x99999
                 self.MaxCount = 0
@@ -3235,10 +3247,11 @@ class SRVSVC(RPCService):
                 self.Passwd_pointer = 0
                 self.Reserved = 0
                 self.Security_descriptor = 0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_pointer(self.Pointer)
 
                 self.MaxCount = len(self.Data)
@@ -3246,33 +3259,29 @@ class SRVSVC(RPCService):
 
                 for i in self.Data:
                     data = self.Data[i]
-                    self.__packer.pack_pointer(self.Netname_pointer) # netname
-                    self.__packer.pack_long(data['type']) # STYPE_DISKTREE
-                    self.__packer.pack_pointer(self.Remark_pointer) # remark
-                    self.__packer.pack_long(self.Permissions)		# permissions
-                    self.__packer.pack_long(self.Max_uses) # max_uses
-                    self.__packer.pack_long(self.Current_uses)		# current_uses
-                    self.__packer.pack_pointer(self.Path_pointer) # path
-                    self.__packer.pack_pointer(self.Passwd_pointer) 	# passwd
-                    self.__packer.pack_long(self.Reserved) # reserved
-                    # security descriptor
-                    self.__packer.pack_pointer(self.Security_descriptor)
+                    self.__packer.pack_pointer(self.Netname_pointer)  # netname
+                    self.__packer.pack_long(data['type'])  # STYPE_DISKTREE
+                    self.__packer.pack_pointer(self.Remark_pointer)  # remark
+                    self.__packer.pack_long(self.Permissions)  # permissions
+                    self.__packer.pack_long(self.Max_uses)  # max_uses
+                    self.__packer.pack_long(self.Current_uses)  # current_uses
+                    self.__packer.pack_pointer(self.Path_pointer)  # path
+                    self.__packer.pack_pointer(self.Passwd_pointer)  # passwd
+                    self.__packer.pack_long(self.Reserved)  # reserved
+                    self.__packer.pack_pointer(self.Security_descriptor)  # security descriptor
 
                 for j in self.Data:
                     data = self.Data[i]
-                    self.__packer.pack_string_fix(
-                        str(j+'\0').encode('utf16')[2:])
-                    self.__packer.pack_string_fix(
-                        str(data['path']+'\0').encode('utf16')[2:])
-                    self.__packer.pack_string_fix(
-                        str(data['comment']+'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(j + '\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(data['path'] + '\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(data['comment'] + '\0').encode('utf16')[2:])
 
-    class SHARE_INFO_2(object):
-        #2.2.4.24 SHARE_INFO_2
+    class SHARE_INFO_2:
+        # 2.2.4.24 SHARE_INFO_2
         #
-        #http://msdn.microsoft.com/en-us/library/cc247148%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc247148%28v=PROT.13%29.aspx
         #
-        #typedef struct _SHARE_INFO_2 {
+        # typedef struct _SHARE_INFO_2 {
         #  [string] wchar_t* shi2_netname;
         #  DWORD shi2_type;
         #  [string] wchar_t* shi2_remark;
@@ -3281,10 +3290,10 @@ class SRVSVC(RPCService):
         #  DWORD shi2_current_uses;
         #  [string] wchar_t* shi2_path;
         #  [string] wchar_t* shi2_passwd;
-        #} SHARE_INFO_2
+        # } SHARE_INFO_2
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Data = {}
                 self.Pointer = 0x99999
                 self.MaxCount = 0
@@ -3296,7 +3305,7 @@ class SRVSVC(RPCService):
                 self.Current_uses = 1
                 self.Path_pointer = 0x6789
                 self.Passwd_pointer = 0x0
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 self.ref = self.__packer.unpack_pointer()
                 self.netname = self.__packer.unpack_pointer()
                 self.sharetype = self.__packer.unpack_long()
@@ -3309,73 +3318,69 @@ class SRVSVC(RPCService):
                 self.share_name = self.__packer.unpack_string()
                 self.share_comment = self.__packer.unpack_string()
                 self.share_path = self.__packer.unpack_string()
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 #				self.__packer.pack_pointer(self.Pointer)
                 #				self.MaxCount = len(self.Data)
                 #				self.__packer.pack_long(self.MaxCount)
 
                 rpclog.warn("%s" % self.Data)
-#				raise Exception()
+                #				raise Exception()
 
                 for i in self.Data:
                     data = self.Data[i]
-                    self.__packer.pack_pointer(self.Netname_pointer) # netname
-                    self.__packer.pack_long(data['type']) # STYPE_DISKTREE
-                    self.__packer.pack_pointer(self.Remark_pointer) # remark
-                    self.__packer.pack_long(self.Permissions) # permissions
-                    self.__packer.pack_long(self.Max_uses) # max_uses
-                    self.__packer.pack_long(self.Current_uses) # current_uses
-                    self.__packer.pack_pointer(self.Path_pointer) # path
-                    self.__packer.pack_pointer(self.Passwd_pointer) # passwd
+                    self.__packer.pack_pointer(self.Netname_pointer)  # netname
+                    self.__packer.pack_long(data['type'])  # STYPE_DISKTREE
+                    self.__packer.pack_pointer(self.Remark_pointer)  # remark
+                    self.__packer.pack_long(self.Permissions)  # permissions
+                    self.__packer.pack_long(self.Max_uses)  # max_uses
+                    self.__packer.pack_long(self.Current_uses)  # current_uses
+                    self.__packer.pack_pointer(self.Path_pointer)  # path
+                    self.__packer.pack_pointer(self.Passwd_pointer)  # passwd
 
                 for j in self.Data:
-                    data = self.Data[j]
+                    data = self.Data[i]
                     # NetName
-                    self.__packer.pack_string_fix(
-                        str(j+'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(j + '\0').encode('utf16')[2:])
                     # Remark
-                    self.__packer.pack_string_fix(
-                        str(data['comment']+'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(data['comment'] + '\0').encode('utf16')[2:])
                     # Path
-                    self.__packer.pack_string_fix(
-                        str(data['path']+'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(data['path'] + '\0').encode('utf16')[2:])
 
-    class SERVER_INFO_101(object):
+    class SERVER_INFO_101:
         # 2.2.4.41 SERVER_INFO_101
         #
         # http://msdn.microsoft.com/en-us/library/cc247164%28v=PROT.13%29.aspx
         #
-        #typedef struct _SERVER_INFO_101 {
+        # typedef struct _SERVER_INFO_101 {
         #  DWORD sv101_platform_id;
         #  [string] wchar_t* sv101_name;
         #  DWORD sv101_version_major;
         #  DWORD sv101_version_minor;
         #  DWORD sv101_type;
         #  [string] wchar_t* sv101_comment;
-        #} SERVER_INFO_101,
+        # } SERVER_INFO_101,
         # *PSERVER_INFO_101,
         # *LPSERVER_INFO_101;
 
         def __init__(self, p):
             self.__packer = p
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.Data = {}
                 self.Pointer = 0x99999
-                # Windows NT or a newer Windows operating system version.
-                self.Platform_id = 500
-                self.Name_pointer= 0x68458
+                self.Platform_id = 500  # Windows NT or a newer Windows operating system version.
+                self.Name_pointer = 0x68458
                 self.Comment_pointer = 0x73429
-                self.Version_major = 5 # Windows XP SP2 default reply
-                self.Version_minor = 1 # Windows XP SP2 default reply
-                # self.Type = 0x00051003 # Windows XP SP2 default reply (Type:
-                # Workstation, Server, NT Workstation, Potential Browser,
-                # Master Browser)
-                self.Type = 0xFFFFFFFF # All servers
-            elif isinstance(self.__packer,ndrlib.Unpacker):
+                self.Version_major = 5  # Windows XP SP2 default reply
+                self.Version_minor = 1  # Windows XP SP2 default reply
+                # self.Type = 0x00051003 # Windows XP SP2 default reply (Type: Workstation, Server, NT Workstation, Potential Browser, Master Browser)
+                self.Type = 0xFFFFFFFF  # All servers
+            elif isinstance(self.__packer, ndrlib.Unpacker):
                 pass
+
         def pack(self):
-            if isinstance(self.__packer,ndrlib.Packer):
+            if isinstance(self.__packer, ndrlib.Packer):
                 self.__packer.pack_pointer(self.Pointer)
                 self.__packer.pack_long(self.Platform_id)
                 self.__packer.pack_pointer(self.Name_pointer)
@@ -3385,9 +3390,7 @@ class SRVSVC(RPCService):
                 self.__packer.pack_pointer(self.Comment_pointer)
 
                 for j in range(len(self.Data)):
-                    self.__packer.pack_string_fix(
-                        self.Data[j].encode('utf16')[2:])
-
+                    self.__packer.pack_string_fix(self.Data[j].encode('utf16')[2:])
 
     @classmethod
     def handle_NetShareEnum(cls, con, p):
@@ -3454,7 +3457,7 @@ class SRVSVC(RPCService):
             resumehandle = x.unpack_long()
 
         rpclog.debug("infostruct_share %i preferdmaxlen %i  resumehandleptr %x resumehandle %i" % (
-            infostruct_share,preferdmaxlen,resumehandleptr,resumehandle) )
+        infostruct_share, preferdmaxlen, resumehandleptr, resumehandle))
 
         # compile reply
         r = ndrlib.Packer()
@@ -3497,15 +3500,15 @@ class SRVSVC(RPCService):
         #		[in]    uint32 pathflags
         #		);
         x = ndrlib.Unpacker(p.StubData)
-        ref        = x.unpack_pointer()
+        ref = x.unpack_pointer()
         server_unc = x.unpack_string()
-        path       = x.unpack_string()
-        maxbuf     = x.unpack_long()
-        prefix     = x.unpack_string()
-        pathtype   = x.unpack_long()
-        pathflags  = x.unpack_long()
+        path = x.unpack_string()
+        maxbuf = x.unpack_long()
+        prefix = x.unpack_string()
+        pathtype = x.unpack_long()
+        pathflags = x.unpack_long()
         rpclog.debug("ref 0x%x server_unc %s path %s maxbuf %s prefix %s pathtype %i pathflags %i" % (
-            ref, server_unc, path, maxbuf, prefix, pathtype, pathflags))
+        ref, server_unc, path, maxbuf, prefix, pathtype, pathflags))
 
         # conficker is stubborn
         # dionaea replies to the exploit, conficker retries to exploit
@@ -3513,13 +3516,12 @@ class SRVSVC(RPCService):
         # therefore it is not possible to canonicalize the path and check if it path canonicalizes beyond /
         # the workaround ... is checking for a 'long' path ...
         if len(path) > 128:
-            raise DCERPCValueError("path","too long", path)
+            raise DCERPCValueError("path", "too long", path)
 
         r = ndrlib.Packer()
         r.pack_long(pathtype)
         r.pack_long(0)
         r.pack_string(path)
-
 
         return r.get_buffer()
 
@@ -3534,35 +3536,35 @@ class SRVSVC(RPCService):
         #		[in]    uint32 pathflags
         #		);
         p = ndrlib.Unpacker(p.StubData)
-        ref        = p.unpack_pointer()
+        ref = p.unpack_pointer()
         server_unc = p.unpack_string()
-        path1       = p.unpack_string()
-        path2     = p.unpack_string()
-        pathtype   = p.unpack_long()
-        pathflags  = p.unpack_long()
+        path1 = p.unpack_string()
+        path2 = p.unpack_string()
+        pathtype = p.unpack_long()
+        pathflags = p.unpack_long()
         rpclog.debug("ref 0x%x server_unc %s path1 %s path2 %s pathtype %i pathflags %i" % (
-            ref, server_unc, path1, path2, pathtype, pathflags))
+        ref, server_unc, path1, path2, pathtype, pathflags))
         r = ndrlib.Packer()
         x = (path1 > path2) - (path1 < path2)
         if x < 0:
-            r.pack_long( 0 )
+            r.pack_long(0)
         else:
-            r.pack_long( 0 )
-#		r.pack_long( x )
+            r.pack_long(0)
+        # r.pack_long( x )
         return r.get_buffer()
 
     @classmethod
     def handle_NetShareAdd(cls, con, p):
-        #3.1.4.7 NetrShareAdd (Opnum 14)
+        # 3.1.4.7 NetrShareAdd (Opnum 14)
         #
-        #http://msdn.microsoft.com/en-us/library/cc247275%28v=PROT.10%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc247275%28v=PROT.10%29.aspx
         #
-        #NET_API_STATUS NetrShareAdd(
-        #[in, string, unique] SRVSVC_HANDLE ServerName,
+        # NET_API_STATUS NetrShareAdd(
+        # [in, string, unique] SRVSVC_HANDLE ServerName,
         #  [in] DWORD Level,
         #  [in, switch_is(Level)] LPSHARE_INFO InfoStruct,
         #  [in, out, unique] DWORD* ParmErr
-        #);
+        # );
         p = ndrlib.Unpacker(p.StubData)
         ServerName = SRVSVC.SRVSVC_HANDLE(p)
         infostruct_level = p.unpack_long()
@@ -3574,8 +3576,7 @@ class SRVSVC(RPCService):
         ptr_parm = p.unpack_pointer()
         error = p.unpack_long()
 
-        rpclog.debug("infostruct_share %i ptr_parm %x ParmErr %i" %
-                     (infostruct_share,ptr_parm,error) )
+        rpclog.debug("infostruct_share %i ptr_parm %x ParmErr %i" % (infostruct_share, ptr_parm, error))
 
         r = ndrlib.Packer()
         r.pack_pointer(0x324567)
@@ -3585,21 +3586,21 @@ class SRVSVC(RPCService):
 
     @classmethod
     def handle_NetrShareGetInfo(cls, con, p):
-        #3.1.4.10 NetrShareGetInfo (Opnum 16)
+        # 3.1.4.10 NetrShareGetInfo (Opnum 16)
         #
-        #http://msdn.microsoft.com/en-us/library/cc247236%28PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc247236%28PROT.13%29.aspx
         #
-        #NET_API_STATUS NetrShareGetInfo(
+        # NET_API_STATUS NetrShareGetInfo(
         #  [in, string, unique] SRVSVC_HANDLE ServerName,
         #  [in, string] WCHAR* NetName,
         #  [in] DWORD Level,
         #  [out, switch_is(Level)] LPSHARE_INFO InfoStruct
-        #);
+        # );
         p = ndrlib.Unpacker(p.StubData)
         ServerName = SRVSVC.SRVSVC_HANDLE(p)
         NetName = p.unpack_string()
         Level = p.unpack_long()
-        rpclog.debug("NetName %s Level %i" % (NetName,Level))
+        rpclog.debug("NetName %s Level %i" % (NetName, Level))
 
         r = ndrlib.Packer()
         r.pack_long(Level)
@@ -3613,31 +3614,30 @@ class SRVSVC(RPCService):
 
             if NetName in __shares__:
                 data = __shares__[NetName]
-                s.Data = {NetName:data}
+                s.Data = {NetName: data}
             else:
-                rpclog.warn(
-                    "FIXME: this code has to be written, lame workaround for now")
+                rpclog.warn("FIXME: this code has to be written, lame workaround for now")
                 data = __shares__['C$']
-                s.Data = {NetName:data}
+                s.Data = {NetName: data}
             s.pack()
 
         r.pack_long(0)
         return r.get_buffer()
 
     @classmethod
-    def handle_NetNameCanonicalize (cls, con, p):
-        #3.1.4.33 NetprNameCanonicalize (Opnum 34)
+    def handle_NetNameCanonicalize(cls, con, p):
+        # 3.1.4.33 NetprNameCanonicalize (Opnum 34)
         #
-        #http://msdn.microsoft.com/en-us/library/cc247261%28PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc247261%28PROT.13%29.aspx
         #
-        #NET_API_STATUS NetprNameCanonicalize(
+        # NET_API_STATUS NetprNameCanonicalize(
         #  [in, string, unique] SRVSVC_HANDLE ServerName,
         #  [in, string] WCHAR* Name,
         #  [out, size_is(OutbufLen)] WCHAR* Outbuf,
         #  [in, range(0,64000)] DWORD OutbufLen,
         #  [in] DWORD NameType,
         #  [in] DWORD Flags
-        #);
+        # );
 
         p = ndrlib.Unpacker(p.StubData)
         ServerName = SRVSVC.SRVSVC_HANDLE(p)
@@ -3645,8 +3645,8 @@ class SRVSVC(RPCService):
         Outbuflen = p.unpack_long()
         NameType = p.unpack_long()
         Flags = p.unpack_long()
-        rpclog.debug("ServerName %s Name %s Outbuflen %i Nametype %i Flags %i" % (
-            ServerName, Name, Outbuflen , NameType, Flags))
+        rpclog.debug(
+            "ServerName %s Name %s Outbuflen %i Nametype %i Flags %i" % (ServerName, Name, Outbuflen, NameType, Flags))
 
         r = ndrlib.Packer()
 
@@ -3668,14 +3668,14 @@ class SRVSVC(RPCService):
 
     @classmethod
     def handle_NetrRemoteTOD(cls, con, p):
-        #3.1.4.21 NetrRemoteTOD (Opnum 28)
+        # 3.1.4.21 NetrRemoteTOD (Opnum 28)
         #
-        #http://msdn.microsoft.com/en-us/library/cc247248%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc247248%28v=PROT.13%29.aspx
         #
-        #NET_API_STATUS NetrRemoteTOD(
+        # NET_API_STATUS NetrRemoteTOD(
         #  [in, string, unique] SRVSVC_HANDLE ServerName,
         #  [out] LPTIME_OF_DAY_INFO* BufferPtr
-        #);
+        # );
         p = ndrlib.Unpacker(p.StubData)
         ServerName = SRVSVC.SRVSVC_HANDLE(p)
 
@@ -3686,10 +3686,10 @@ class SRVSVC(RPCService):
         # for 'Windows XP Service Pack 3'
         if OS_TYPE == 3:
             r.pack_pointer(0x00020000)
-        else :
+        else:
             r.pack_pointer(0x23456)
 
-        #typedef struct TIME_OF_DAY_INFO {
+        # typedef struct TIME_OF_DAY_INFO {
         #  DWORD tod_elapsedt;
         #  DWORD tod_msecs;
         #  DWORD tod_hours;
@@ -3702,46 +3702,46 @@ class SRVSVC(RPCService):
         #  DWORD tod_month;
         #  DWORD tod_year;
         #  DWORD tod_weekday;
-        #} TIME_OF_DAY_INFO,
+        # } TIME_OF_DAY_INFO,
         # *PTIME_OF_DAY_INFO,
         # *LPTIME_OF_DAY_INFO;
 
         ctime = localtime()
-        #Eg, time.struct_time(tm_year=2010, tm_mon=7, tm_mday=13, tm_hour=2, tm_min=12, tm_sec=27, tm_wday=1, tm_yday=194, tm_isdst=0)
+        # Eg, time.struct_time(tm_year=2010, tm_mon=7, tm_mday=13, tm_hour=2, tm_min=12, tm_sec=27, tm_wday=1, tm_yday=194, tm_isdst=0)
 
-        r.pack_long(int(time()))#elapsedt
-        r.pack_long(515893)	#msecs
-        r.pack_long(ctime[3])	#hours
-        r.pack_long(ctime[4])   #mins
-        r.pack_long(ctime[5])   #secs
-        r.pack_long(59) 	#hunds
-        r.pack_long_signed(int(altzone/60),) #timezone
-        r.pack_long(310) 	#tinterval
-        r.pack_long(ctime[2])   #day
-        r.pack_long(ctime[1])   #month
-        r.pack_long(ctime[0])   #year
-        r.pack_long(ctime[6])   #weekday
+        r.pack_long(int(time()))  # elapsedt
+        r.pack_long(515893)  # msecs
+        r.pack_long(ctime[3])  # hours
+        r.pack_long(ctime[4])  # mins
+        r.pack_long(ctime[5])  # secs
+        r.pack_long(59)  # hunds
+        r.pack_long_signed(int(altzone / 60), )  # timezone
+        r.pack_long(310)  # tinterval
+        r.pack_long(ctime[2])  # day
+        r.pack_long(ctime[1])  # month
+        r.pack_long(ctime[0])  # year
+        r.pack_long(ctime[6])  # weekday
 
         r.pack_long(0)
         return r.get_buffer()
 
     @classmethod
     def handle_NetServerGetInfo(cls, con, p):
-        #3.1.4.17 NetrServerGetInfo (Opnum 21)
+        # 3.1.4.17 NetrServerGetInfo (Opnum 21)
         #
-        #http://msdn.microsoft.com/en-us/library/cc247243%28v=PROT.13%29.aspx
+        # http://msdn.microsoft.com/en-us/library/cc247243%28v=PROT.13%29.aspx
         #
-        #NET_API_STATUS NetrServerGetInfo(
+        # NET_API_STATUS NetrServerGetInfo(
         #  [in, string, unique] SRVSVC_HANDLE ServerName,
         #  [in] DWORD Level,
         #  [out, switch_is(Level)] LPSERVER_INFO InfoStruct
-        #);
+        # );
 
         p = ndrlib.Unpacker(p.StubData)
         Pointer = p.unpack_pointer()
         ServerName = p.unpack_string()
         Level = p.unpack_long()
-        print("ServerName %s Level %i" % (ServerName,Level))
+        print("ServerName %s Level %i" % (ServerName, Level))
 
         r = ndrlib.Packer()
         r.pack_long(Level)
@@ -3755,6 +3755,7 @@ class SRVSVC(RPCService):
         r.pack_long(0)
         return r.get_buffer()
 
+
 class ssdpsrv(RPCService):
     uuid = UUID('4b112204-0e19-11d3-b42b-0000f81feb9f').hex
 
@@ -3762,14 +3763,14 @@ class ssdpsrv(RPCService):
 class SVCCTL(RPCService):
     """[MS-SCMR]: Service Control Manager Remote Protocol Specification
 
-    http://msdn.microsoft.com/en-us/library/cc245832%28v=PROT.10%29.aspx
-    """
+	http://msdn.microsoft.com/en-us/library/cc245832%28v=PROT.10%29.aspx
+	"""
     uuid = UUID('367abb81-9844-35f1-ad32-98f038001003').hex
     version_major = 0
     version_minor = 0
 
     ops = {
-        0 : "CloseServiceHandle",
+        0: "CloseServiceHandle",
         24: "CreateServiceA",
         27: "OpenSCManagerA",
     }
@@ -3803,7 +3804,6 @@ class SVCCTL(RPCService):
         # );
         pass
 
-
     @classmethod
     def handle_OpenSCManagerA(cls, con, p):
         # DWORD ROpenSCManagerA(
@@ -3813,6 +3813,7 @@ class SVCCTL(RPCService):
         # 	[out] LPSC_RPC_HANDLE lpScHandle
         # );
         pass
+
 
 class tapsrv(RPCService):
     uuid = UUID('2f5f6520-ca46-1067-b319-00dd010662da').hex
@@ -3830,7 +3831,7 @@ class w32time(RPCService):
     uuid = UUID('8fb6d884-2388-11d0-8c35-00c04fda2795').hex
 
 
-#class winipsec(RPCService):
+# class winipsec(RPCService):
 #	uuid = UUID('12345678-1234-abcd-ef00-0123456789ab').hex
 
 
@@ -3852,7 +3853,7 @@ class WKSSVC(RPCService):
     ops = {
         0x1b: "NetAddAlternateComputerName"
     }
-    vulns  = {
+    vulns = {
         0x1b: "MS03-39",
     }
 
@@ -3860,4 +3861,7 @@ class WKSSVC(RPCService):
     def handle_NetAddAlternateComputerName(cls, con, p):
         # MS03-039
         pass
+
+
+
 
