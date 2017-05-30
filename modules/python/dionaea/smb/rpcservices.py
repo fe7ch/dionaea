@@ -909,7 +909,7 @@ class lsarpc(RPCService):
         LookupOptions = x.unpack_long()
         ClientRevision = x.unpack_long()
         rpclog.debug("LookupLevel %i MappedCount %i LookupOptions %i ClientRevision %i" % (
-        LookupLevel, MappedCount, LookupOptions, ClientRevision))
+            LookupLevel, MappedCount, LookupOptions, ClientRevision))
 
         r = ndrlib.Packer()
         r.pack_pointer(0x23456)
@@ -1279,16 +1279,16 @@ class samr(RPCService):
         # } RPC_SID_IDENTIFIER_AUTHORITY;
         #
         SID_AUTHORITY = {
-            'NULL_SID_AUTHORITY'		: b'\x00\x00\x00\x00\x00\x00',
+            'NULL_SID_AUTHORITY'	: b'\x00\x00\x00\x00\x00\x00',
             'WORLD_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x01',
             'LOCAL_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x02',
             'CREATOR_SID_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x03',
             'NON_UNIQUE_AUTHORITY'			: b'\x00\x00\x00\x00\x00\x04',
-            'NT_AUTHORITY'				: b'\x00\x00\x00\x00\x00\x05','SECURITY_MANDATORY_LABEL_AUTHORITY'	: b'\x00\x00\x00\x00\x00\x10'
+            'NT_AUTHORITY'				: b'\x00\x00\x00\x00\x00\x05',
+            'SECURITY_MANDATORY_LABEL_AUTHORITY'	: b'\x00\x00\x00\x00\x00\x10'
         }
-        def
 
-        __init__(self, p):
+        def __init__(self, p):
             self.__packer = p
             if isinstance(self.__packer, ndrlib.Packer):
                 self.Value = ''
@@ -1473,7 +1473,7 @@ class samr(RPCService):
 
         def pack(self):
             if isinstance(self.__packer, ndrlib.Packer):
-                for i in range(int(len(self.Name)/3 ) ):
+                for i in range(int(len(self.Name) / 3)):
                     # Index
                     self.__packer.pack_long(self.Index)
                     # RelativeID
@@ -1483,7 +1483,7 @@ class samr(RPCService):
 
                     for k in range(3):
                         b = samr.RPC_UNICODE_STRING(self.__packer)
-                        b.Data = self.Name[i*k ]
+                        b.Data = self.Name[i * k]
                         b.pack()
                         self.__packer.pack_pointer(self.Pointer)
 
@@ -1795,11 +1795,11 @@ class samr(RPCService):
 
                 for j in range(len(self.Buffer)):
                     self.__packer.pack_string(self.Buffer[j].encode('utf16')[2:])
-                self.__packer.pack_long(int(self.UnitsPerWeek* 60 /8 ) )
+                self.__packer.pack_long(int(self.UnitsPerWeek * 60 / 8))
                 self.__packer.pack_long(0)
-                self.__packer.pack_long(int(self.UnitsPerWeek/8 ) )
+                self.__packer.pack_long(int(self.UnitsPerWeek / 8))
 
-                for l in range(int(self.UnitsPerWeek/8 ) ):
+                for l in range(int(self.UnitsPerWeek / 8)):
                     self.__packer.pack_small(self.LogonHours)
 
     class SAMPR_PSID_ARRAY:
@@ -2180,7 +2180,7 @@ class samr(RPCService):
         rpclog.debug("DomainHandle %s" % DomainHandle)
 
         # unsigned long Count
-        Count= x.unpack_long()
+        Count = x.unpack_long()
         rpclog.debug("Count %i" % Count)
 
         # RPC_UNICODE_STRING Names[*]
@@ -2208,7 +2208,7 @@ class samr(RPCService):
             r.pack_long(1)
 
             data = __userinfo__[LookupName]
-            rid  = data["RID"]
+            rid = data["RID"]
             r.pack_long(rid)
 
             # PSAMPR_ULONG_ARRAY Use
@@ -2318,7 +2318,7 @@ class samr(RPCService):
         # Pointer to the USER_INFORMATION_CLASS
         r.pack_pointer(0x000cc228)
 
-        if UserInformationClass == 21 :
+        if UserInformationClass == 21:
             r.pack_long(UserInformationClass)
             # SAMPR_USER_ALL_INFORMATION
             s = samr.SAMPR_USER_ALL_INFORMATION(r)
@@ -2326,7 +2326,7 @@ class samr(RPCService):
 
             if LookupName in __userinfo__:
                 data = __userinfo__[LookupName]
-                rid  = data["RID"]
+                rid = data["RID"]
                 comment = data["comment"]
                 s.Buffer = [LookupName, '', '', '', '', '', comment, '', '', '', '', '', '']
                 s.UserID = rid
@@ -2340,7 +2340,7 @@ class samr(RPCService):
         return r.get_buffer()
 
     @classmethod
-    def handle_GetGroupsForUser (cls, con, p):
+    def handle_GetGroupsForUser(cls, con, p):
         # 3.1.5.9.1 SamrGetGroupsForUser (Opnum 39)
         #
         # http://msdn.microsoft.com/en-us/library/cc245815%28v=prot.10%29.aspx
@@ -3457,7 +3457,7 @@ class SRVSVC(RPCService):
             resumehandle = x.unpack_long()
 
         rpclog.debug("infostruct_share %i preferdmaxlen %i  resumehandleptr %x resumehandle %i" % (
-        infostruct_share, preferdmaxlen, resumehandleptr, resumehandle))
+            infostruct_share, preferdmaxlen, resumehandleptr, resumehandle))
 
         # compile reply
         r = ndrlib.Packer()
@@ -3508,7 +3508,7 @@ class SRVSVC(RPCService):
         pathtype = x.unpack_long()
         pathflags = x.unpack_long()
         rpclog.debug("ref 0x%x server_unc %s path %s maxbuf %s prefix %s pathtype %i pathflags %i" % (
-        ref, server_unc, path, maxbuf, prefix, pathtype, pathflags))
+            ref, server_unc, path, maxbuf, prefix, pathtype, pathflags))
 
         # conficker is stubborn
         # dionaea replies to the exploit, conficker retries to exploit
@@ -3543,7 +3543,7 @@ class SRVSVC(RPCService):
         pathtype = p.unpack_long()
         pathflags = p.unpack_long()
         rpclog.debug("ref 0x%x server_unc %s path1 %s path2 %s pathtype %i pathflags %i" % (
-        ref, server_unc, path1, path2, pathtype, pathflags))
+            ref, server_unc, path1, path2, pathtype, pathflags))
         r = ndrlib.Packer()
         x = (path1 > path2) - (path1 < path2)
         if x < 0:
@@ -3861,7 +3861,3 @@ class WKSSVC(RPCService):
     def handle_NetAddAlternateComputerName(cls, con, p):
         # MS03-039
         pass
-
-
-
-
