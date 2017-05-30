@@ -34,10 +34,14 @@ import logging
 import tempfile
 import binascii
 import os
+import hashlib
+from dionaea.util import *
 from uuid import UUID
 
 from .include.smbfields import *
 from .rpcservices import __shares__
+from .rpcservices import __shares_Samba__
+from .rpcservices import OS_TYPE
 from .include.gssapifields import GSSAPI, SPNEGO, NegTokenTarg
 from .include.ntlmfields import NTLMSSP_Header, NTLM_Negotiate, NTLM_Challenge, NTLMSSP_REQUEST_TARGET
 from .include.packet import Raw
@@ -71,6 +75,7 @@ class smbd(connection):
             'stop': False,
         }
         self.buf = b''
+        self.buf2 = b''  # ms17-010 SMB_COM_TRANSACTION2
         self.outbuf = None
         self.fids = {}
         self.printer = b''  # spoolss file "queue"
@@ -123,11 +128,11 @@ class smbd(connection):
         r = self.process(p)
         smblog.debug('packet: {0}'.format(p.summary()))
 
-        # if p.haslayer(Raw):
-        #     smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
-        #     p.show()
+        #		if p.haslayer(Raw):
+        #			smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
+        #			p.show()
 
-        # i = incident("dionaea.module.python.smb.info")
+        #		i = incident("dionaea.module.python.smb.info")
         #		i.con = self
         #		i.direction = 'in'
         #		i.data = p.summary()
@@ -286,6 +291,11 @@ class smbd(connection):
                         r.SecurityBlob = BER_identifier_enc(BER_CLASS_CON, 1, 1) + BER_len_enc(len(raw)) + raw
             elif p.haslayer(SMB_Sessionsetup_AndX_Request2):
                 r = SMB_Sessionsetup_AndX_Response2()
+                # quick fix to support for different OS type (Samba) for CVE-2017-7494 Samba SMB RCE
+                # TODO: there are definitely more things to tweak and make these real
+                if OS_TYPE == 5:
+                    r.NativeOS = "Windows 6.1\0"
+                    r.NativeLanManager = "Samba 4.3.11"
             else:
                 smblog.warn("Unknown Session Setup Type used")
 
@@ -307,6 +317,8 @@ class smbd(connection):
             if Service.startswith('\\\\'):
                 Service = Service[1:]
             Service = Service.split('\\')[-1]
+            if Service[-1] == '\x00':
+                Service = Service[:-1]
             if Service[-1] == '$':
                 Service = Service[:-1]
             r.Service = Service + '\x00'
@@ -318,6 +330,12 @@ class smbd(connection):
             elif h.Path == b'ADMIN$\0' or h.Path == b'C$\0':
                 r = SMB_Treeconnect_AndX_Response2()
                 rstatus = 0xc0000022  # STATUS_ACCESS_DENIED
+            # support for CVE-2017-7494 Samba SMB RCE
+            elif h.Path[-6:] == b'share\0':
+                smblog.critical('Possible CVE-2017-7494 Samba SMB RCE attempts..')
+                r.AndXOffset = 0
+                r.Service = "A:\0"
+                r.NativeFileSystem = "NTFS\0"
         elif Command == SMB_COM_TREE_DISCONNECT:
             r = SMB_Treedisconnect()
         elif Command == SMB_COM_CLOSE:
@@ -332,6 +350,7 @@ class smbd(connection):
                 icd.report()
                 self.fids[p.FID].unlink(self.fids[p.FID].name)
                 del self.fids[p.FID]
+                r = SMB_Close_Response()
         elif Command == SMB_COM_LOGOFF_ANDX:
             r = SMB_Logoff_AndX()
         elif Command == SMB_COM_NT_CREATE_ANDX:
@@ -415,7 +434,12 @@ class smbd(connection):
                             outpacket.show()
                             self.outbuf = outpacket.build()
                         self.buf = b''
-
+        elif Command == SMB_COM_WRITE:
+            h = p.getlayer(SMB_Write_Request)
+            if h.FID in self.fids and self.fids[h.FID] is not None:
+                smblog.warn("WRITE FILE!")
+                self.fids[h.FID].write(h.Data)
+            r = SMB_Write_Response(CountOfBytesWritten=h.CountOfBytesToWrite)
         elif Command == SMB_COM_READ_ANDX:
             r = SMB_Read_AndX_Response()
             h = p.getlayer(SMB_Read_AndX_Request)
@@ -480,15 +504,28 @@ class smbd(connection):
                     rout.OutData = b""
                     comments = []
                     coff = 0
-                    for i in __shares__:
-                        rout.OutData += struct.pack("<13sxHHH",
-                                                    i,  # NetworkName
-                                                    # Pad
-                                                    __shares__[i]['type'] & 0xff,  # Type
-                                                    coff + len(__shares__) * 20,  # RemarkOffsetLow
-                                                    0x0101)  # RemarkOffsetHigh
-                        comments.append(__shares__[i]['comment'])
-                        coff += len(__shares__[i]['comment']) + 1
+                    # support for CVE-2017-7494 Samba SMB RCE
+                    # OS_TYPE = 5 (Linux Samba)
+                    if OS_TYPE == 5:
+                        for i in __shares_Samba__:
+                            rout.OutData += struct.pack("<13sxHHH",
+                                                        i,  # NetworkName
+                                                        # Pad
+                                                        __shares_Samba__[i]['type'] & 0xff,  # Type
+                                                        coff + len(__shares_Samba__) * 20,  # RemarkOffsetLow
+                                                        0x0101)  # RemarkOffsetHigh
+                            comments.append(__shares_Samba__[i]['comment'])
+                            coff += len(__shares_Samba__[i]['comment']) + 1
+                    else:
+                        for i in __shares__:
+                            rout.OutData += struct.pack("<13sxHHH",
+                                                        i,  # NetworkName
+                                                        # Pad
+                                                        __shares__[i]['type'] & 0xff,  # Type
+                                                        coff + len(__shares__) * 20,  # RemarkOffsetLow
+                                                        0x0101)  # RemarkOffsetHigh
+                            comments.append(__shares__[i]['comment'])
+                            coff += len(__shares__[i]['comment']) + 1
                     rout.show()
                 outpacket = rout
                 self.outbuf = outpacket.build()
@@ -526,14 +563,101 @@ class smbd(connection):
                     rdata.ByteCount = dceplen
                     rdata.Bytes = self.outbuf
 
+                if socket.htons(h.Setup[0]) == TRANS_NMPIPE_PEEK:
+                    SetupCount = h.SetupCount
+                    if SetupCount > 0:
+                        smblog.info('MS17-010 - SMB RCE exploit scanning..')
+                        r = SMB_Trans_Response_Simple()
+                        # returned #STATUS_INSUFF_SERVER_RESOURCE as we not being patched
+                        rstatus = 0xc0000205  # STATUS_INSUFF_SERVER_RESOURCES
+
             r /= rdata
-        elif p.getlayer(SMB_Header).Command == SMB_COM_TRANSACTION2:
-            r = SMB_Trans2_Response()
+        elif Command == SMB_COM_TRANSACTION2:
+            h = p.getlayer(SMB_Trans2_Request)
+            if h.Setup[0] == SMB_TRANS2_SESSION_SETUP:
+                smblog.info('Possible DoublePulsar connection attempts..')
+
+                # determine DoublePulsar opcode and command
+                # https://zerosum0x0.blogspot.sg/2017/04/doublepulsar-initial-smb-backdoor-ring.html
+                # The opcode list is as follows:
+                # 0x23 = ping
+                # 0xc8 = exec
+                # 0x77 = kil
+                op = calculate_doublepulsar_opcode(h.Timeout)
+                op2 = hex(op)[-2:]
+                oplist = [('23', 'ping'), ('c8', 'exec'), ('77', 'kill')]
+                for fid, command in oplist:
+                    if op2 == fid:
+                        smblog.info("DoublePulsar request opcode: %s command: %s" % (op2, command))
+                if op2 != '23' and op2 != 'c8' and op2 != '77':
+                    smblog.info("unknown opcode: %s" % op2)
+
+                # make sure the payload size not larger than 10MB
+                if len(self.buf2) > 10485760:
+                    self.buf2 = ''
+                elif len(self.buf2) == 0 and h.DataCount == 4096:
+                    self.buf2 = self.buf2 + h.Data
+                elif len(self.buf2) != 0 and h.DataCount == 4096:
+                    self.buf2 = self.buf2 + h.Data
+                elif len(self.buf2) != 0 and h.DataCount < 4096:
+                    smblog.info('DoublePulsar payload receiving..')
+                    self.buf2 = self.buf2 + h.Data
+                    key = bytearray([0x52, 0x73, 0x36, 0x5E])
+                    xor_output = xor(self.buf2, key)
+                    hash_buf2 = hashlib.md5(self.buf2);
+                    smblog.info('DoublePulsar payload - MD5 (before XOR decryption): %s' % (hash_buf2.hexdigest()))
+                    hash_xor_output = hashlib.md5(xor_output);
+                    smblog.info(
+                        'DoublePulsar payload - MD5 (after XOR decryption ): %s' % (hash_xor_output.hexdigest()))
+
+                    dir = g_dionaea.config()['downloads']['dir'] + "/"
+                    # f = open(dir+hash_xor_output.hexdigest(),'wb')
+                    # f.write(xor_output)
+                    # f.close
+
+                    # payload = some data(shellcode or code to load the executable) + executable itself
+                    # try to locate the executable and remove the prepended data
+                    # now, we will have the executable itself
+                    offset = 0
+                    for i, c in enumerate(xor_output):
+                        if ((xor_output[i] == 0x4d and xor_output[i + 1] == 0x5a) and xor_output[i + 2] == 0x90):
+                            offset = i
+                            smblog.info('DoublePulsar payload - MZ header found...')
+                            break
+
+                    hash_xor_output_mz = hashlib.md5(xor_output[offset:]);
+
+                    # save the captured payload/gift/evil/buddy to disk
+                    smblog.info('DoublePulsar payload - MD5 final: %s. Save to disk' % (hash_xor_output_mz.hexdigest()))
+                    f1 = open(dir + hash_xor_output_mz.hexdigest(), 'wb')
+                    f1.write(xor_output[offset:])
+                    f1.close()
+                    self.buf2 = b''
+                    xor_output = b''
+
+                    icd = incident("dionaea.download.complete")
+                    icd.path = dir + hash_xor_output_mz.hexdigest()
+                    icd.url = self.remote.host
+                    icd.con = self
+                    icd.report()
+                r = SMB_Trans2_Response()
+                rstatus = 0xc0000002  # STATUS_NOT_IMPLEMENTED
+            elif h.Setup[0] == SMB_TRANS2_FIND_FIRST2:
+                r = SMB_Trans2_FIND_FIRST2_Response()
+            else:
+                r = SMB_Trans2_Response()
+
         elif Command == SMB_COM_DELETE:
-            # specific for NMAP smb-enum-shares.nse support
             h = p.getlayer(SMB_Delete_Request)
-            if h.FileName == b'nmap-test-file\0':
-                r = SMB_Delete_Response()
+            r = SMB_Delete_Response()
+        elif Command == SMB_COM_TRANSACTION2_SECONDARY:
+            h = p.getlayer(SMB_Trans2_Secondary_Request)
+            # TODO: need some extra works
+            pass
+        elif Command == SMB_COM_NT_TRANSACT:
+            h = p.getlayer(SMB_NT_Trans_Request)
+            r = SMB_NT_Trans_Response()
+            rstatus = 0x00000000  # STATUS_SUCCESS
         else:
             smblog.critical('...unknown SMB Command. bailing out.')
             p.show()
@@ -545,6 +669,13 @@ class smbd(connection):
             #			smbh.Flags2 = p.getlayer(SMB_Header).Flags2 & ~SMB_FLAGS2_EXT_SEC
             smbh.MID = p.getlayer(SMB_Header).MID
             smbh.PID = p.getlayer(SMB_Header).PID
+            # Deception for DoublePulsar, we fix the XOR key first as 0x5273365E
+            # WannaCry will use the XOR key to encrypt and deliver next payload, so we can decode easily later
+            if Command == SMB_COM_TRANSACTION2:
+                h = p.getlayer(SMB_Trans2_Request)
+                if h.Setup[0] == SMB_TRANS2_SESSION_SETUP:
+                    smbh.MID = p.getlayer(SMB_Header).MID + 16
+                    smbh.Signature = 0x000000009cf9c567
             rp = NBTSession() / smbh / r
 
         if Command in SMB_Commands:
@@ -590,7 +721,7 @@ class smbd(connection):
                     if service_uuid.hex in registered_services:
                         service = registered_services[service_uuid.hex]
                         smblog.info('Found a registered UUID (%s). Accepting Bind for %s' % (
-                        service_uuid, service.__class__.__name__))
+                            service_uuid, service.__class__.__name__))
                         self.state['uuid'] = service_uuid.hex
                         # Copy Transfer Syntax to CtxItem
                         ctxitem.AckResult = 0
@@ -600,7 +731,7 @@ class smbd(connection):
                             "Attempt to register %s failed, UUID does not exist or is not implemented" % service_uuid)
                 else:
                     smblog.warn("Attempt to register %s failed, TransferSyntax %s is unknown" % (
-                    service_uuid, transfersyntax_uuid))
+                        service_uuid, transfersyntax_uuid))
                 i = incident("dionaea.modules.python.smb.dcerpc.bind")
                 i.con = self
                 i.uuid = str(service_uuid)
@@ -689,4 +820,3 @@ services = inspect.getmembers(rpcservices, inspect.isclass)
 for name, servicecls in services:
     if not name == 'RPCService' and issubclass(servicecls, rpcservices.RPCService):
         register_rpc_service(servicecls())
-
