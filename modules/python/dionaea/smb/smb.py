@@ -123,9 +123,9 @@ class smbd(connection):
         r = self.process(p)
         smblog.debug('packet: {0}'.format(p.summary()))
 
-        if p.haslayer(Raw):
-            smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
-            p.show()
+        # if p.haslayer(Raw):
+        #     smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
+        #     p.show()
 
         # i = incident("dionaea.module.python.smb.info")
         #		i.con = self
