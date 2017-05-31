@@ -45,7 +45,7 @@ rpclog = logging.getLogger('rpcservices')
 # 3:"Windows XP Service Pack 3",
 # 4:"Windows 7 Service Pack 1",
 # 5:"Linux Samba 4.3.11"
-OS_TYPE = 2
+OS_TYPE = 5
 
 
 class DCERPCValueError(Exception):
@@ -3209,8 +3209,8 @@ class SRVSVC(RPCService):
 
                 for j in self.Data:
                     data = self.Data[j]
-                    self.__packer.pack_string_fix(str(j + '\0').encode('utf16')[2:])
-                    self.__packer.pack_string_fix(str(data['comment'] + '\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(j + b'\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(str(data['comment'] + b'\0').encode('utf16')[2:])
 
     class SHARE_INFO_502:
         # 2.2.4.26 SHARE_INFO_502_I
