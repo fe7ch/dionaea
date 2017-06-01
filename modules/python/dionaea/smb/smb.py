@@ -93,12 +93,12 @@ class smbd(connection):
             p = NBTSession(data, _ctx=self)
         except:
             t = traceback.format_exc()
-            smblog.critical(t)
+            smblog.debug(t)
             return len(data)
 
         if len(data) < (p.LENGTH + 4):
             # we probably do not have the whole packet yet -> return 0
-            smblog.critical('=== SMB did not get enough data')
+            smblog.debug('=== SMB did not get enough data')
             return 0
 
         if p.TYPE == 0x81:
@@ -110,7 +110,7 @@ class smbd(connection):
 
         if p.haslayer(SMB_Header) and p[SMB_Header].Start != b'\xffSMB':
             # not really SMB Header -> bail out
-            smblog.critical('=== not really SMB')
+            smblog.debug('=== not really SMB')
             self.close()
             return len(data)
 
@@ -159,7 +159,7 @@ class smbd(connection):
             if self.state['stop']:
                 smblog.debug('process() returned None.')
             else:
-                smblog.critical('process() returned None.')
+                smblog.debug('process() returned None.')
 
         if p.haslayer(Raw):
             smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
@@ -332,7 +332,7 @@ class smbd(connection):
                 rstatus = 0xc0000022  # STATUS_ACCESS_DENIED
             # support for CVE-2017-7494 Samba SMB RCE
             elif h.Path[-6:] == b'share\0':
-                smblog.critical('Possible CVE-2017-7494 Samba SMB RCE attempts..')
+                smblog.debug('Possible CVE-2017-7494 Samba SMB RCE attempts..')
                 r.AndXOffset = 0
                 r.Service = "A:\0"
                 r.NativeFileSystem = "NTFS\0"
@@ -448,7 +448,7 @@ class smbd(connection):
                 if self.state['stop']:
                     smblog.debug('drop dead!')
                 else:
-                    smblog.critical('dcerpc processing failed. bailing out.')
+                    smblog.debug('dcerpc processing failed. bailing out.')
                 return rp
 
             rdata = SMB_Data()
@@ -552,7 +552,7 @@ class smbd(connection):
                         if self.state['stop']:
                             smblog.debug('drop dead!')
                         else:
-                            smblog.critical('dcerpc processing failed. bailing out.')
+                            smblog.debug('dcerpc processing failed. bailing out.')
                         return rp
                     self.outbuf = outpacket.build()
                     dceplen = len(self.outbuf)
@@ -660,7 +660,7 @@ class smbd(connection):
             r = SMB_NT_Trans_Response()
             rstatus = 0x00000000  # STATUS_SUCCESS
         else:
-            smblog.critical('...unknown SMB Command. bailing out.')
+            smblog.debug('...unknown SMB Command. bailing out.')
             p.show()
 
         if r:
@@ -760,7 +760,7 @@ class smbd(connection):
             outbuf = resp
         else:
             # unknown DCERPC packet -> logcrit and bail out.
-            smblog.critical('unknown DCERPC packet. bailing out.')
+            smblog.debug('unknown DCERPC packet. bailing out.')
         return outbuf
 
     def handle_timeout_idle(self):
