@@ -604,13 +604,14 @@ class smbd(connection):
                     self.buf2 = self.buf2 + h.Data
                     key = bytearray([0x52, 0x73, 0x36, 0x5E])
                     xor_output = xor(self.buf2, key)
-                    hash_buf2 = hashlib.md5(self.buf2);
+                    hash_buf2 = hashlib.md5(self.buf2)
                     smblog.info('DoublePulsar payload - MD5 (before XOR decryption): %s' % (hash_buf2.hexdigest()))
-                    hash_xor_output = hashlib.md5(xor_output);
+                    hash_xor_output = hashlib.md5(xor_output)
                     smblog.info(
                         'DoublePulsar payload - MD5 (after XOR decryption ): %s' % (hash_xor_output.hexdigest()))
 
-                    dir = g_dionaea.config()['downloads']['dir'] + "/"
+                    dionaea_config = g_dionaea.config().get("dionaea")
+                    download_dir = dionaea_config.get("download.dir")
                     # f = open(dir+hash_xor_output.hexdigest(),'wb')
                     # f.write(xor_output)
                     # f.close
@@ -625,18 +626,18 @@ class smbd(connection):
                             smblog.info('DoublePulsar payload - MZ header found...')
                             break
 
-                    hash_xor_output_mz = hashlib.md5(xor_output[offset:]);
+                    hash_xor_output_mz = hashlib.sha1(xor_output[offset:])
 
                     # save the captured payload/gift/evil/buddy to disk
-                    smblog.info('DoublePulsar payload - MD5 final: %s. Save to disk' % (hash_xor_output_mz.hexdigest()))
-                    f1 = open(dir + hash_xor_output_mz.hexdigest(), 'wb')
+                    smblog.info('DoublePulsar payload - SHA1 final: %s. Save to disk' % (hash_xor_output_mz.hexdigest()))
+                    f1 = open(os.path.join(download_dir, hash_xor_output_mz.hexdigest()), 'wb')
                     f1.write(xor_output[offset:])
                     f1.close()
                     self.buf2 = b''
                     xor_output = b''
 
                     icd = incident("dionaea.download.complete")
-                    icd.path = dir + hash_xor_output_mz.hexdigest()
+                    icd.path = os.path.join(download_dir, hash_xor_output_mz.hexdigest())
                     icd.url = self.remote.host
                     icd.con = self
                     icd.report()
