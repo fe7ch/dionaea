@@ -593,7 +593,7 @@ class smbd(connection):
                     smblog.info("unknown opcode: %s" % op2)
 
                 # make sure the payload size not larger than 10MB
-                if len(self.buf2) > 10485760:
+                if len(self.buf2) > 104857600:
                     self.buf2 = ''
                 elif len(self.buf2) == 0 and h.DataCount == 4096:
                     self.buf2 = self.buf2 + h.Data
