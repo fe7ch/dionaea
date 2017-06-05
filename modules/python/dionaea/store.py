@@ -29,7 +29,7 @@
 from dionaea import IHandlerLoader
 from dionaea.core import ihandler, incident, g_dionaea
 from dionaea.exception import LoaderError
-from dionaea.util import md5file
+from dionaea.util import sha1file
 
 import os
 import logging
@@ -68,28 +68,28 @@ class storehandler(ihandler):
         logger.debug("storing file")
         p = icd.path
         # ToDo: use sha1 or sha256
-        md5 = md5file(p)
+        sha1hash = sha1file(p)
         # ToDo: use sys.path.join()
-        n = os.path.join(self.download_dir, md5)
+        n = os.path.join(self.download_dir, sha1hash)
         i = incident("dionaea.download.complete.hash")
         i.file = n
         i.url = icd.url
         if hasattr(icd, 'con'):
             i.con = icd.con
-        i.md5hash = md5
+        i.md5hash = sha1hash
         i.report()
 
         try:
             os.stat(n)
             i = incident("dionaea.download.complete.again")
-            logger.debug("file %s already existed" % md5)
+            logger.debug("file %s already existed" % sha1hash)
         except OSError:
-            logger.debug("saving new file %s to %s" % (md5, n))
+            logger.debug("saving new file %s to %s" % (sha1hash, n))
             os.link(p, n)
             i = incident("dionaea.download.complete.unique")
         i.file = n
         if hasattr(icd, 'con'):
             i.con = icd.con
         i.url = icd.url
-        i.md5hash = md5
+        i.md5hash = sha1hash
         i.report()

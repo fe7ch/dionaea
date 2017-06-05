@@ -1,35 +1,34 @@
-#*************************************************************************
-#*                               Dionaea
-#*                           - catches bugs -
-#*
-#*
-#*
-#* Copyright (C) 2010  Mark Schloesser
-#* Copyright (C) 2009  Paul Baecher & Markus Koetter
-#*
-#* This program is free software; you can redistribute it and/or
-#* modify it under the terms of the GNU General Public License
-#* as published by the Free Software Foundation; either version 2
-#* of the License, or (at your option) any later version.
-#*
-#* This program is distributed in the hope that it will be useful,
-#* but WITHOUT ANY WARRANTY; without even the implied warranty of
-#* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#* GNU General Public License for more details.
-#*
-#* You should have received a copy of the GNU General Public License
-#* along with this program; if not, write to the Free Software
-#* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-#*
-#*
-#*             contact nepenthesdev@gmail.com
-#*
-#*******************************************************************************/
+# *************************************************************************
+# *                               Dionaea
+# *                           - catches bugs -
+# *
+# *
+# *
+# * Copyright (C) 2010  Mark Schloesser
+# * Copyright (C) 2009  Paul Baecher & Markus Koetter
+# *
+# * This program is free software; you can redistribute it and/or
+# * modify it under the terms of the GNU General Public License
+# * as published by the Free Software Foundation; either version 2
+# * of the License, or (at your option) any later version.
+# *
+# * This program is distributed in the hope that it will be useful,
+# * but WITHOUT ANY WARRANTY; without even the implied warranty of
+# * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# * GNU General Public License for more details.
+# *
+# * You should have received a copy of the GNU General Public License
+# * along with this program; if not, write to the Free Software
+# * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# *
+# *
+# *             contact nepenthesdev@gmail.com
+# *
+# *******************************************************************************/
 
 import hashlib
 import logging
 import re
-
 
 logger = logging.getLogger("util")
 logger.setLevel(logging.DEBUG)
@@ -44,6 +43,17 @@ def md5file(filename):
     :rtype: str
     """
     return hashfile(filename, hashlib.md5())
+
+
+def sha1file(filename):
+    """
+    Compute sha1 checksum of file.
+
+    :param str filename: File to read
+    :return: MD5 checksum as hex string
+    :rtype: str
+    """
+    return hashfile(filename, hashlib.sha1())
 
 
 def sha512file(filename):
@@ -132,11 +142,13 @@ def find_shell_download(connection, data, report_incidents=True):
 
     return urls
 
+
 def xor(data, key):
     l = len(key)
     return bytearray((
         (data[i] ^ key[i % l]) for i in range(0, len(data))
     ))
+
 
 def calculate_doublepulsar_opcode(t):
     op = (t) + (t >> 8) + (t >> 16) + (t >> 24)
