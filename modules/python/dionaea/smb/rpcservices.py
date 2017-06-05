@@ -2918,61 +2918,18 @@ STYPE_IPC = 0x00000003  # Interprocess communication (IPC)
 STYPE_SPECIAL = 0x80000000  # Special share reserved for interprocess communication (IPC$) or remote administration of the server (ADMIN$). Can also refer to administrative shares such as C$, D$, E$, and so forth.
 STYPE_TEMPORARY = 0x40000000  # A temporary share that is not persisted for creation each time the file server initializes.
 
-__shares__ = {
-    b'ADMIN$': {
-        'type': STYPE_DISKTREE,
-        'comment': 'Remote Admin',
-        'path': 'C:\\Windows'
-    },
-    b'C$': {
-        'type': STYPE_DISKTREE | STYPE_SPECIAL,
-        'comment': 'Default Share',
-        'path': 'C:\\'
-    },
-    b'IPC$': {
-        'type': STYPE_IPC,
-        'comment': 'Remote IPC',
-        'path': ''
-    },
-    b'Printer': {
-        'type': STYPE_PRINTQ,
-        'comment': 'Microsoft XPS Document Writer',
-        'path': '',
-    }
-}
-
-__shares_Samba__ = {
-    b'admin': {
-        'type': STYPE_DISKTREE,
-        'comment': 'Remote Admin',
-        'path': '\\home\\admin'
-    },
-    b'share': {
-        'type': STYPE_DISKTREE,
-        'comment': 'Default Share',
-        'path': '\\share'
-    },
-    b'IPC$': {
-        'type': STYPE_IPC,
-        'comment': 'IPC Service',
-        'path': ''
-    },
-    b'print': {
-        'type': STYPE_PRINTQ,
-        'comment': 'Printer Drivers',
-        'path': '',
-    }
-}
+# Overwritten by smb config
+__shares__ = {}
 
 
 class SRVSVC(RPCService):
     """ [MS-SRVS]: Server Service Remote Protocol Specification
 
-	http://msdn.microsoft.com/en-us/library/cc247080%28v=PROT.13%29.aspx
+    http://msdn.microsoft.com/en-us/library/cc247080%28v=PROT.13%29.aspx
 
-	http://download.microsoft.com/download/a/e/6/ae6e4142-aa58-45c6-8dcf-a657e5900cd3/%5BMS-SRVS%5D.pdf 
+    http://download.microsoft.com/download/a/e/6/ae6e4142-aa58-45c6-8dcf-a657e5900cd3/%5BMS-SRVS%5D.pdf
 
-	"""
+    """
     uuid = UUID('4b324fc8-1670-01d3-1278-5a47bf6ee188').hex
     version_major = 0
     version_minor = 0
@@ -2992,7 +2949,7 @@ class SRVSVC(RPCService):
         0x20: "MS08-67",
     }
 
-    class SRVSVC_HANDLE:
+    class SRVSVC_HANDLE(object):
         # 2.2.1.1 SRVSVC_HANDLE
         #
         # http://msdn.microsoft.com/en-us/library/cc247105%28PROT.10%29.aspx
@@ -3012,7 +2969,7 @@ class SRVSVC(RPCService):
                 self.__packer.pack_pointer(self.Pointer)
                 self.__packer.pack_string(self.Handle)
 
-    class SHARE_INFO_0_CONTAINER:
+    class SHARE_INFO_0_CONTAINER(object):
         # 2.2.4.32 SHARE_INFO_0_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247156%28PROT.13%29.aspx
@@ -3043,7 +3000,8 @@ class SRVSVC(RPCService):
                 b.MaxCount = self.EntriesRead
                 b.pack()
 
-    class SHARE_INFO_1_CONTAINER:
+
+    class SHARE_INFO_1_CONTAINER(object):
         # 2.2.4.33 SHARE_INFO_1_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247157%28PROT.10%29.aspx
@@ -3073,7 +3031,8 @@ class SRVSVC(RPCService):
                 b.Data = self.Data
                 b.pack()
 
-    class SHARE_INFO_2_CONTAINER:
+
+    class SHARE_INFO_2_CONTAINER(object):
         # 2.2.4.34 SHARE_INFO_2_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247158%28PROT.13%29.aspx
@@ -3104,7 +3063,7 @@ class SRVSVC(RPCService):
                 b.Data = self.Data
                 b.pack()
 
-    class SHARE_INFO_502_CONTAINER:
+    class SHARE_INFO_502_CONTAINER(object):
         # 2.2.4.36 SHARE_INFO_502_CONTAINER
         #
         # http://msdn.microsoft.com/en-us/library/cc247160%28PROT.13%29.aspx
@@ -3134,7 +3093,7 @@ class SRVSVC(RPCService):
                 b.Data = self.Data
                 b.pack()
 
-    class SHARE_INFO_0:
+    class SHARE_INFO_0(object):
         # 2.2.4.22 SHARE_INFO_0
         #
         # http://msdn.microsoft.com/en-us/library/cc247146%28v=PROT.13%29.aspx
@@ -3165,9 +3124,11 @@ class SRVSVC(RPCService):
                     self.__packer.pack_pointer(self.Netname_pointer)  # netname
                 for j in self.Data:
                     data = self.Data[j]
-                    self.__packer.pack_string_fix(str(j + '\0').encode('utf16')[2:])
+                    self.__packer.pack_string_fix(
+                        str(j+'\0').encode('utf16')[2:])
 
-    class SHARE_INFO_1:
+
+    class SHARE_INFO_1(object):
         # 2.2.4.23 SHARE_INFO_1
         #
         # http://msdn.microsoft.com/en-us/library/cc247147%28PROT.10%29.aspx
@@ -3212,7 +3173,7 @@ class SRVSVC(RPCService):
                     self.__packer.pack_string_fix(str(j + b'\0').encode('utf16')[2:])
                     self.__packer.pack_string_fix(str(data['comment'] + b'\0').encode('utf16')[2:])
 
-    class SHARE_INFO_502:
+    class SHARE_INFO_502(object):
         # 2.2.4.26 SHARE_INFO_502_I
         #
         # http://msdn.microsoft.com/en-us/library/cc247150%28v=PROT.13%29.aspx
@@ -3348,7 +3309,7 @@ class SRVSVC(RPCService):
                     # Path
                     self.__packer.pack_string_fix(str(data['path'] + '\0').encode('utf16')[2:])
 
-    class SERVER_INFO_101:
+    class SERVER_INFO_101(object):
         # 2.2.4.41 SERVER_INFO_101
         #
         # http://msdn.microsoft.com/en-us/library/cc247164%28v=PROT.13%29.aspx

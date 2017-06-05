@@ -30,7 +30,9 @@ from dionaea.core import *
 
 import datetime
 import traceback
+import hashlib
 import logging
+import os
 import tempfile
 import binascii
 import os
@@ -47,6 +49,7 @@ from .include.ntlmfields import NTLMSSP_Header, NTLM_Negotiate, NTLM_Challenge, 
 from .include.packet import Raw
 from .include.asn1.ber import BER_len_dec, BER_len_enc, BER_identifier_dec, BER_CLASS_APP, BER_CLASS_CON, \
     BER_identifier_enc
+from dionaea.util import calculate_doublepulsar_opcode, xor
 
 smblog = logging.getLogger('SMB')
 
@@ -67,7 +70,11 @@ def register_rpc_service(service):
 
 
 class smbd(connection):
-    def __init__(self):
+    shared_config_values = [
+        "config"
+    ]
+
+    def __init__ (self, proto="tcp", config=None):
         connection.__init__(self, "tcp")
         self.state = {
             'lastcmd': None,
@@ -80,6 +87,18 @@ class smbd(connection):
         self.fids = {}
         self.printer = b''  # spoolss file "queue"
 
+        self.config = None
+
+    def apply_config(self, config=None):
+        # Avoid import loops
+        from .extras import SmbConfig
+        self.config = SmbConfig(config=config)
+        # Set the global OS_TYPE value
+        # ToDo: This is a quick and dirty hack
+        from . import rpcservices
+        rpcservices.__shares__ = self.config.shares
+        rpcservices.OS_TYPE = self.config.os_type
+
     def handle_established(self):
         #		self.timeouts.sustain = 120
         self.timeouts.idle = 120
@@ -88,7 +107,6 @@ class smbd(connection):
         self.processors()
 
     def handle_io_in(self, data):
-
         try:
             p = NBTSession(data, _ctx=self)
         except:
@@ -117,11 +135,12 @@ class smbd(connection):
         p.show()
         r = None
 
-        # this is one of the things you have to love, it violates the spec, but has to work ...
-        if p.haslayer(SMB_Sessionsetup_ESEC_AndX_Request) and p.getlayer(
-                SMB_Sessionsetup_ESEC_AndX_Request).WordCount == 13:
+        # this is one of the things you have to love, it violates the spec, but
+        # has to work ...
+        if p.haslayer(SMB_Sessionsetup_ESEC_AndX_Request) and p.getlayer(SMB_Sessionsetup_ESEC_AndX_Request).WordCount == 13:
             smblog.debug("recoding session setup request!")
-            p.getlayer(SMB_Header).decode_payload_as(SMB_Sessionsetup_AndX_Request2)
+            p.getlayer(SMB_Header).decode_payload_as(
+                SMB_Sessionsetup_AndX_Request2)
             x = p.getlayer(SMB_Sessionsetup_AndX_Request2)
             x.show()
 
@@ -156,10 +175,7 @@ class smbd(connection):
             # r.show2()
             self.send(r.build())
         else:
-            if self.state['stop']:
-                smblog.debug('process() returned None.')
-            else:
-                smblog.debug('process() returned None.')
+            smblog.error('process() returned None.')
 
         if p.haslayer(Raw):
             smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
@@ -182,7 +198,10 @@ class smbd(connection):
         if Command == SMB_COM_NEGOTIATE:
             # Negociate Protocol -> Send response that supports minimal features in NT LM 0.12 dialect
             # (could be randomized later to avoid detection - but we need more dialects/options support)
-            r = SMB_Negociate_Protocol_Response()
+            r = SMB_Negociate_Protocol_Response(
+                OemDomainName=self.config.oem_domain_name + "\0",
+                ServerName=self.config.server_name + "\0"
+            )
             # we have to select dialect
             c = 0
             tmp = p.getlayer(SMB_Negociate_Protocol_Request_Counts)
@@ -201,9 +220,14 @@ class smbd(connection):
         # elif self.state == STATE_SESSIONSETUP and p.getlayer(SMB_Header).Command == 0x73:
         elif Command == SMB_COM_SESSION_SETUP_ANDX:
             if p.haslayer(SMB_Sessionsetup_ESEC_AndX_Request):
-                r = SMB_Sessionsetup_ESEC_AndX_Response()
+                r = SMB_Sessionsetup_ESEC_AndX_Response(
+                    NativeOS=self.config.native_os + "\0",
+                    NativeLanManager=self.config.native_lan_manager + "\0",
+                    PrimaryDomain=self.config.primary_domain
+                )
                 ntlmssp = None
-                sb = p.getlayer(SMB_Sessionsetup_ESEC_AndX_Request).SecurityBlob
+                sb = p.getlayer(
+                    SMB_Sessionsetup_ESEC_AndX_Request).SecurityBlob
 
                 if sb.startswith(b"NTLMSSP"):
                     # GSS-SPNEGO without OID
@@ -215,11 +239,12 @@ class smbd(connection):
                         r.Action = 0
                         ntlmnegotiate = ntlmssp.getlayer(NTLM_Negotiate)
                         rntlmssp = NTLMSSP_Header(MessageType=2)
-                        rntlmchallenge = NTLM_Challenge(NegotiateFlags=ntlmnegotiate.NegotiateFlags)
-                        #						if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
-                        #							rntlmchallenge.TargetNameFields.Offset = 0x38
-                        #							rntlmchallenge.TargetNameFields.Len = 0x1E
-                        #							rntlmchallenge.TargetNameFields.MaxLen = 0x1E
+                        rntlmchallenge = NTLM_Challenge(
+                            NegotiateFlags=ntlmnegotiate.NegotiateFlags)
+#						if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
+#							rntlmchallenge.TargetNameFields.Offset = 0x38
+#							rntlmchallenge.TargetNameFields.Len = 0x1E
+#							rntlmchallenge.TargetNameFields.MaxLen = 0x1E
 
                         rntlmchallenge.ServerChallenge = b"\xa4\xdf\xe8\x0b\xf5\xc6\x1e\x3a"
                         rntlmssp = rntlmssp / rntlmchallenge
@@ -252,15 +277,20 @@ class smbd(connection):
                         spnego = SPNEGO(sb)
                         spnego.show()
                         sb = spnego.NegotiationToken.mechToken.__str__()
-                        cls, pc, tag, sb = BER_identifier_dec(sb)
-                        l, sb = BER_len_dec(sb)
+                        try:
+                            cls,pc,tag,sb = BER_identifier_dec(sb)
+                        except BER_Exception as e:
+                            smblog.warn("%s" % format(e))
+                            return rp
+                        l,sb = BER_len_dec(sb)
                         ntlmssp = NTLMSSP_Header(sb)
                         ntlmssp.show()
                         if ntlmssp.MessageType == 1:
                             r.Action = 0
                             ntlmnegotiate = ntlmssp.getlayer(NTLM_Negotiate)
                             rntlmssp = NTLMSSP_Header(MessageType=2)
-                            rntlmchallenge = NTLM_Challenge(NegotiateFlags=ntlmnegotiate.NegotiateFlags)
+                            rntlmchallenge = NTLM_Challenge(
+                                NegotiateFlags=ntlmnegotiate.NegotiateFlags)
                             rntlmchallenge.TargetInfoFields.Offset = rntlmchallenge.TargetNameFields.Offset = 0x30
                             #							if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
                             #								rntlmchallenge.TargetNameFields.Offset = 0x38
@@ -269,13 +299,16 @@ class smbd(connection):
                             rntlmchallenge.ServerChallenge = b"\xa4\xdf\xe8\x0b\xf5\xc6\x1e\x3a"
                             rntlmssp = rntlmssp / rntlmchallenge
                             rntlmssp.show()
-                            negtokentarg = NegTokenTarg(negResult=1, supportedMech='1.3.6.1.4.1.311.2.2.10')
+                            negtokentarg = NegTokenTarg(
+                                negResult=1,supportedMech='1.3.6.1.4.1.311.2.2.10')
                             negtokentarg.responseToken = rntlmssp.build()
                             negtokentarg.mechListMIC = None
                             raw = negtokentarg.build()
-                            # r.SecurityBlob = b'\xa1' + BER_len_enc(len(raw)) + raw
-                            r.SecurityBlob = BER_identifier_enc(BER_CLASS_CON, 1, 1) + BER_len_enc(len(raw)) + raw
-                            rstatus = 0xc0000016  # STATUS_MORE_PROCESSING_REQUIRED
+                            #r.SecurityBlob = b'\xa1' + BER_len_enc(len(raw)) + raw
+                            r.SecurityBlob = BER_identifier_enc(
+                                BER_CLASS_CON,1,1) + BER_len_enc(len(raw)) + raw
+                            # STATUS_MORE_PROCESSING_REQUIRED
+                            rstatus = 0xc0000016
                     elif cls == BER_CLASS_CON and pc == 1 and tag == 1:
                         # NTLM AUTHENTICATE
                         #
@@ -283,19 +316,21 @@ class smbd(connection):
                         # \xa1 BER_length NegTokenTarg('accepted')
                         negtokentarg = NegTokenTarg(sb)
                         negtokentarg.show()
-                        ntlmssp = NTLMSSP_Header(negtokentarg.responseToken.val)
+                        ntlmssp = NTLMSSP_Header(
+                            negtokentarg.responseToken.val)
                         ntlmssp.show()
-                        rnegtokentarg = NegTokenTarg(negResult=0, supportedMech=None)
+                        rnegtokentarg = NegTokenTarg(
+                            negResult=0, supportedMech=None)
                         raw = rnegtokentarg.build()
-                        # r.SecurityBlob = b'\xa1' + BER_len_enc(len(raw)) + raw
-                        r.SecurityBlob = BER_identifier_enc(BER_CLASS_CON, 1, 1) + BER_len_enc(len(raw)) + raw
+                        #r.SecurityBlob = b'\xa1' + BER_len_enc(len(raw)) + raw
+                        r.SecurityBlob = BER_identifier_enc(
+                            BER_CLASS_CON,1,1) + BER_len_enc(len(raw)) + raw
             elif p.haslayer(SMB_Sessionsetup_AndX_Request2):
-                r = SMB_Sessionsetup_AndX_Response2()
-                # quick fix to support for different OS type (Samba) for CVE-2017-7494 Samba SMB RCE
-                # TODO: there are definitely more things to tweak and make these real
-                if OS_TYPE == 5:
-                    r.NativeOS = "Windows 6.1\0"
-                    r.NativeLanManager = "Samba 4.3.11"
+                r = SMB_Sessionsetup_AndX_Response2(
+                    NativeOS=self.config.native_os + "\0",
+                    NativeLanManager=self.config.native_lan_manager + "\0",
+                    PrimaryDomain=self.config.primary_domain + "\0"
+                )
             else:
                 smblog.warn("Unknown Session Setup Type used")
 
@@ -325,11 +360,19 @@ class smbd(connection):
 
             # specific for NMAP smb-enum-shares.nse support
             if h.Path == b'nmap-share-test\0':
-                r = SMB_Treeconnect_AndX_Response2()
-                rstatus = 0xc00000cc  # STATUS_BAD_NETWORK_NAME
+                r = SMB_Treeconnect_AndX_Response2(
+                    NativeOS=self.config.native_os + "\0",
+                    NativeLanManager=self.config.native_lan_manager + "\0",
+                    PrimaryDomain=self.config.primary_domain + "\0"
+                )
+                rstatus = 0xc00000cc #STATUS_BAD_NETWORK_NAME
             elif h.Path == b'ADMIN$\0' or h.Path == b'C$\0':
-                r = SMB_Treeconnect_AndX_Response2()
-                rstatus = 0xc0000022  # STATUS_ACCESS_DENIED
+                r = SMB_Treeconnect_AndX_Response2(
+                    NativeOS=self.config.native_os + "\0",
+                    NativeLanManager=self.config.native_lan_manager + "\0",
+                    PrimaryDomain=self.config.primary_domain + "\0"
+                )
+                rstatus = 0xc0000022 #STATUS_ACCESS_DENIED
             # support for CVE-2017-7494 Samba SMB RCE
             elif h.Path[-6:] == b'share\0':
                 smblog.debug('Possible CVE-2017-7494 Samba SMB RCE attempts..')
@@ -363,10 +406,18 @@ class smbd(connection):
             r.FID = 0x4000
             while r.FID in self.fids:
                 r.FID += 0x200
-            if h.FileAttributes & (SMB_FA_HIDDEN | SMB_FA_SYSTEM | SMB_FA_ARCHIVE | SMB_FA_NORMAL):
+            if h.FileAttributes & (SMB_FA_HIDDEN|SMB_FA_SYSTEM|SMB_FA_ARCHIVE|SMB_FA_NORMAL):
                 # if a normal file is requested, provide a file
-                self.fids[r.FID] = tempfile.NamedTemporaryFile(delete=False, prefix="smb-", suffix=".tmp",
-                                                               dir=g_dionaea.config()['downloads']['dir'])
+
+                dionaea_config = g_dionaea.config().get("dionaea")
+                download_dir = dionaea_config.get("download.dir")
+                download_suffix = dionaea_config.get("download.suffix", ".tmp")
+                self.fids[r.FID] = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    prefix="smb-",
+                    suffix=download_suffix,
+                    dir=download_dir
+                )
 
                 # get pretty filename
                 f, v = h.getfield_and_val('Filename')
@@ -393,8 +444,16 @@ class smbd(connection):
             while r.FID in self.fids:
                 r.FID += 0x200
 
-            self.fids[r.FID] = tempfile.NamedTemporaryFile(delete=False, prefix="smb-", suffix=".tmp",
-                                                           dir=g_dionaea.config()['downloads']['dir'])
+            dionaea_config = g_dionaea.config().get("dionaea")
+            download_dir = dionaea_config.get("download.dir")
+            download_suffix = dionaea_config.get("download.suffix", ".tmp")
+
+            self.fids[r.FID] = tempfile.NamedTemporaryFile(
+                delete=False,
+                prefix="smb-",
+                suffix=download_suffix,
+                dir=download_dir
+            )
 
             # get pretty filename
             f, v = h.getfield_and_val('FileName')
@@ -425,9 +484,10 @@ class smbd(connection):
                 if len(self.buf) >= 10:
                     # we got the dcerpc header
                     inpacket = DCERPC_Header(self.buf[:10])
-                    smblog.info("got header")
+                    smblog.debug("got header")
                     inpacket = DCERPC_Header(self.buf)
-                    smblog.info("FragLen %i len(self.buf) %i" % (inpacket.FragLen, len(self.buf)))
+                    smblog.debug("FragLen %i len(self.buf) %i" %
+                                 (inpacket.FragLen, len(self.buf)))
                     if inpacket.FragLen == len(self.buf):
                         outpacket = self.process_dcerpc_packet(self.buf)
                         if outpacket is not None:
@@ -439,7 +499,7 @@ class smbd(connection):
             if h.FID in self.fids and self.fids[h.FID] is not None:
                 smblog.warn("WRITE FILE!")
                 self.fids[h.FID].write(h.Data)
-            r = SMB_Write_Response(CountOfBytesWritten=h.CountOfBytesToWrite)
+            r = SMB_Write_Response(CountOfBytesWritten = h.CountOfBytesToWrite)
         elif Command == SMB_COM_READ_ANDX:
             r = SMB_Read_AndX_Response()
             h = p.getlayer(SMB_Read_AndX_Request)
@@ -454,9 +514,9 @@ class smbd(connection):
             rdata = SMB_Data()
             outbuf = self.outbuf
             outbuflen = len(outbuf)
-            smblog.info(
-                "MaxCountLow %i len(outbuf) %i readcount %i" % (h.MaxCountLow, outbuflen, self.state['readcount']))
-            if h.MaxCountLow < outbuflen - self.state['readcount']:
+            smblog.debug("MaxCountLow %i len(outbuf) %i readcount %i" %(
+                h.MaxCountLow, outbuflen, self.state['readcount']) )
+            if h.MaxCountLow < outbuflen-self.state['readcount']:
                 rdata.ByteCount = h.MaxCountLow
                 newreadcount = self.state['readcount'] + h.MaxCountLow
             else:
@@ -466,7 +526,8 @@ class smbd(connection):
             rdata.Bytes = outbuf[self.state['readcount']: self.state['readcount'] + h.MaxCountLow]
             rdata.ByteCount = len(rdata.Bytes) + 1
             r.DataLenLow = len(rdata.Bytes)
-            smblog.info("readcount %i len(rdata.Bytes) %i" % (self.state['readcount'], len(rdata.Bytes)))
+            smblog.debug("readcount %i len(rdata.Bytes) %i" %
+                         (self.state['readcount'], len(rdata.Bytes)) )
             r /= rdata
 
             self.state['readcount'] = newreadcount
@@ -495,37 +556,29 @@ class smbd(connection):
                 rap = RAP_Request(rapbuf)
                 rap.show()
                 rout = RAP_Response()
+                coff = 0
                 if rap.Opcode == RAP_OP_NETSHAREENUM:
-                    (InfoLevel, ReceiveBufferSize) = struct.unpack("<HH", rap.Params)
-                    print("InfoLevel {} ReceiveBufferSize {}".format(InfoLevel, ReceiveBufferSize))
+                    (InfoLevel,ReceiveBufferSize) = struct.unpack(
+                        "<HH",rap.Params)
+                    print("InfoLevel {} ReceiveBufferSize {}".format(
+                        InfoLevel, ReceiveBufferSize) )
                     if InfoLevel == 1:
                         l = len(__shares__)
                         rout.OutParams = struct.pack("<HH", l, l)
                     rout.OutData = b""
                     comments = []
-                    coff = 0
-                    # support for CVE-2017-7494 Samba SMB RCE
-                    # OS_TYPE = 5 (Linux Samba)
-                    if OS_TYPE == 5:
-                        for i in __shares_Samba__:
-                            rout.OutData += struct.pack("<13sxHHH",
-                                                        i,  # NetworkName
-                                                        # Pad
-                                                        __shares_Samba__[i]['type'] & 0xff,  # Type
-                                                        coff + len(__shares_Samba__) * 20,  # RemarkOffsetLow
-                                                        0x0101)  # RemarkOffsetHigh
-                            comments.append(__shares_Samba__[i]['comment'])
-                            coff += len(__shares_Samba__[i]['comment']) + 1
-                    else:
-                        for i in __shares__:
-                            rout.OutData += struct.pack("<13sxHHH",
-                                                        i,  # NetworkName
-                                                        # Pad
-                                                        __shares__[i]['type'] & 0xff,  # Type
-                                                        coff + len(__shares__) * 20,  # RemarkOffsetLow
-                                                        0x0101)  # RemarkOffsetHigh
-                            comments.append(__shares__[i]['comment'])
-                            coff += len(__shares__[i]['comment']) + 1
+                    for i in __shares__:
+                        rout.OutData += struct.pack("<13sxHHH",
+                                                    i, # NetworkName
+                                                    # Pad
+                                                    # Type
+                                                    __shares__[i][
+                                                        'type'] & 0xff,
+                                                    # RemarkOffsetLow
+                                                    coff + len(__shares__)*20,
+                                                    0x0101) # RemarkOffsetHigh
+                        comments.append(__shares__[i]['comment'])
+                        coff += len(__shares__[i]['comment']) + 1
                     rout.show()
                 outpacket = rout
                 self.outbuf = outpacket.build()
@@ -541,12 +594,14 @@ class smbd(connection):
                 r.DataOffset = 64
 
                 rdata.ByteCount = dceplen
-                rdata.Bytes = self.outbuf + b''.join(c.encode('ascii') + b'\x00' for c in comments)
+                rdata.Bytes = self.outbuf + \
+                    b''.join(c.encode('ascii') + b'\x00' for c in comments)
 
 
             elif TransactionName == '\\PIPE\\':
                 if socket.htons(h.Setup[0]) == TRANS_NMPIPE_TRANSACT:
-                    outpacket = self.process_dcerpc_packet(p.getlayer(DCERPC_Header))
+                    outpacket = self.process_dcerpc_packet(
+                        p.getlayer(DCERPC_Header))
 
                     if not outpacket:
                         if self.state['stop']:
@@ -576,7 +631,6 @@ class smbd(connection):
             h = p.getlayer(SMB_Trans2_Request)
             if h.Setup[0] == SMB_TRANS2_SESSION_SETUP:
                 smblog.info('Possible DoublePulsar connection attempts..')
-
                 # determine DoublePulsar opcode and command
                 # https://zerosum0x0.blogspot.sg/2017/04/doublepulsar-initial-smb-backdoor-ring.html
                 # The opcode list is as follows:
@@ -585,15 +639,15 @@ class smbd(connection):
                 # 0x77 = kil
                 op = calculate_doublepulsar_opcode(h.Timeout)
                 op2 = hex(op)[-2:]
-                oplist = [('23', 'ping'), ('c8', 'exec'), ('77', 'kill')]
-                for fid, command in oplist:
+                oplist = [('23','ping'), ('c8','exec'), ('77','kill')]
+                for fid,command in oplist:
                     if op2 == fid:
                         smblog.info("DoublePulsar request opcode: %s command: %s" % (op2, command))
                 if op2 != '23' and op2 != 'c8' and op2 != '77':
                     smblog.info("unknown opcode: %s" % op2)
 
                 # make sure the payload size not larger than 10MB
-                if len(self.buf2) > 104857600:
+                if len(self.buf2) > 10485760:
                     self.buf2 = ''
                 elif len(self.buf2) == 0 and h.DataCount == 4096:
                     self.buf2 = self.buf2 + h.Data
@@ -604,17 +658,10 @@ class smbd(connection):
                     self.buf2 = self.buf2 + h.Data
                     key = bytearray([0x52, 0x73, 0x36, 0x5E])
                     xor_output = xor(self.buf2, key)
-                    hash_buf2 = hashlib.sha1(self.buf2)
-                    smblog.info('DoublePulsar payload - SHA1 (before XOR decryption): %s' % (hash_buf2.hexdigest()))
-                    hash_xor_output = hashlib.sha1(xor_output)
-                    smblog.info(
-                        'DoublePulsar payload - SHA1 (after XOR decryption ): %s' % (hash_xor_output.hexdigest()))
-
-                    dionaea_config = g_dionaea.config().get("dionaea")
-                    download_dir = dionaea_config.get("download.dir")
-                    # f = open(dir+hash_xor_output.hexdigest(),'wb')
-                    # f.write(xor_output)
-                    # f.close
+                    hash_buf2 = hashlib.md5(self.buf2);
+                    smblog.info('DoublePulsar payload - MD5 (before XOR decryption): %s' % (hash_buf2.hexdigest()))
+                    hash_xor_output = hashlib.md5(xor_output);
+                    smblog.info('DoublePulsar payload - MD5 (after XOR decryption ): %s' % (hash_xor_output.hexdigest()))
 
                     # payload = some data(shellcode or code to load the executable) + executable itself
                     # try to locate the executable and remove the prepended data
@@ -626,21 +673,32 @@ class smbd(connection):
                             smblog.info('DoublePulsar payload - MZ header found...')
                             break
 
-                    hash_xor_output_mz = hashlib.sha1(xor_output[offset:])
-
                     # save the captured payload/gift/evil/buddy to disk
-                    smblog.info('DoublePulsar payload - SHA1 final: %s. Save to disk' % (hash_xor_output_mz.hexdigest()))
-                    f1 = open(os.path.join(download_dir, hash_xor_output_mz.hexdigest()), 'wb')
-                    f1.write(xor_output[offset:])
-                    f1.close()
+                    smblog.info('DoublePulsar payload - Save to disk')
+
+                    dionaea_config = g_dionaea.config().get("dionaea")
+                    download_dir = dionaea_config.get("download.dir")
+                    download_suffix = dionaea_config.get("download.suffix", ".tmp")
+
+                    fp = tempfile.NamedTemporaryFile(
+                        delete=False,
+                        prefix="smb-",
+                        suffix=download_suffix,
+                        dir=download_dir
+                    )
+                    fp.write(xor_output[offset:])
+                    fp.close()
                     self.buf2 = b''
                     xor_output = b''
 
                     icd = incident("dionaea.download.complete")
-                    icd.path = os.path.join(download_dir, hash_xor_output_mz.hexdigest())
-                    icd.url = self.remote.host
+                    icd.path = fp.name
+                    # We need the url for logging
+                    icd.url = ""
                     icd.con = self
                     icd.report()
+                    os.unlink(fp.name)
+
                 r = SMB_Trans2_Response()
                 rstatus = 0xc0000002  # STATUS_NOT_IMPLEMENTED
             elif h.Setup[0] == SMB_TRANS2_FIND_FIRST2:
@@ -680,7 +738,8 @@ class smbd(connection):
             rp = NBTSession() / smbh / r
 
         if Command in SMB_Commands:
-            self.state['lastcmd'] = SMB_Commands[p.getlayer(SMB_Header).Command]
+            self.state['lastcmd'] = SMB_Commands[
+                p.getlayer(SMB_Header).Command]
         else:
             self.state['lastcmd'] = "UNKNOWN"
         return rp
@@ -710,8 +769,9 @@ class smbd(connection):
             outbuf = DCERPC_Header() / DCERPC_Bind_Ack()
             outbuf.CallID = dcep.CallID
             c = 0
-            outbuf.CtxItems = [DCERPC_Ack_CtxItem() for i in range(len(dcep.CtxItems))]
-            while c < len(dcep.CtxItems):  # isinstance(tmp, DCERPC_CtxItem):
+            outbuf.CtxItems = [DCERPC_Ack_CtxItem()
+                               for i in range(len(dcep.CtxItems))]
+            while c < len(dcep.CtxItems): #isinstance(tmp, DCERPC_CtxItem):
                 tmp = dcep.CtxItems[c]
                 ctxitem = outbuf.CtxItems[c]
                 service_uuid = UUID(bytes_le=tmp.UUID)
@@ -721,8 +781,8 @@ class smbd(connection):
                 if str(transfersyntax_uuid) == '8a885d04-1ceb-11c9-9fe8-08002b104860':
                     if service_uuid.hex in registered_services:
                         service = registered_services[service_uuid.hex]
-                        smblog.info('Found a registered UUID (%s). Accepting Bind for %s' % (
-                            service_uuid, service.__class__.__name__))
+                        smblog.info("Found a registered UUID (%s). Accepting Bind for %s" %
+                                    (service_uuid , service.__class__.__name__))
                         self.state['uuid'] = service_uuid.hex
                         # Copy Transfer Syntax to CtxItem
                         ctxitem.AckResult = 0
@@ -732,7 +792,7 @@ class smbd(connection):
                             "Attempt to register %s failed, UUID does not exist or is not implemented" % service_uuid)
                 else:
                     smblog.warn("Attempt to register %s failed, TransferSyntax %s is unknown" % (
-                        service_uuid, transfersyntax_uuid))
+                        service_uuid, transfersyntax_uuid) )
                 i = incident("dionaea.modules.python.smb.dcerpc.bind")
                 i.con = self
                 i.uuid = str(service_uuid)
@@ -784,7 +844,7 @@ class epmapper(smbd):
             p = DCERPC_Header(data)
         except:
             t = traceback.format_exc()
-            smblog.critical(t)
+            smblog.error(t)
             return len(data)
 
         if len(data) < p.FragLen:
@@ -800,7 +860,7 @@ class epmapper(smbd):
             return len(data)
 
         if not r or r is None:
-            smblog.critical('dcerpc processing failed. bailing out.')
+            smblog.error('dcerpc processing failed. bailing out.')
             return len(data)
 
         smblog.debug('response: {0}'.format(r.summary()))

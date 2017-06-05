@@ -1342,7 +1342,7 @@ class SMB_NT_Trans_Request(Packet):
         LEIntField("DataOffset",0),
         FieldLenField("SetupCount", 0, fmt='B', count_of="Setup"),
         ShortField("Function",0),
-         #TODO: need more work on this part
+        #TODO: need more work on this part
         FieldListField("Param", 0, XByteField("", 0), count_from = lambda pkt: pkt.ParamCount),
         StrFixedLenField("Data", b"", length_from=lambda pkt: pkt.DataCount),
     ]
@@ -1381,13 +1381,13 @@ class SMB_Open_AndX_Request(Packet):
         ByteEnumField("AndXCommand",0xff,SMB_Commands),
         ByteField("AndXReserved",0),
         LEShortField("AndXOffset",0),
-#        LEShortField("Flags",0), #
+        #        LEShortField("Flags",0), #
         FlagsField("Flags", 0, -16, SMB_CreateFlags),
         LEShortField("DesiredAcess",0),
         LEShortField("SearchAttributes",0),
-#        LEShortField("FileAttributes",0),
+        #        LEShortField("FileAttributes",0),
         FlagsField("FileAttributes", 0, -16, SMB_FileAttributes),
-#        NTTimeField("CreationTime",datetime.datetime.now()),
+        #        NTTimeField("CreationTime",datetime.datetime.now()),
         LEIntField("CreationTime", 0),
         LEShortField("OpenFunction",0),
         LEIntField("AllocationSize",0),
@@ -1430,6 +1430,7 @@ class SMB_Close(Packet):
         LEShortField("ByteCount",0),
     ]
 
+
 class SMB_Close_Response(Packet):
     name = "SMB Close"
     smb_cmd = SMB_COM_CLOSE
@@ -1439,6 +1440,7 @@ class SMB_Close_Response(Packet):
         LEIntField("LastWriteTime", 0),
         LEShortField("ByteCount",0),
     ]
+
 
 # page 67
 # request and response are identical
@@ -1523,11 +1525,11 @@ class DCERPC_CtxItem(Packet):
         LEShortField("ContextID",0),
         FieldLenField('NumTransItems', 1, fmt='B', length_of="TransItems"),
         ByteField("FixGap", 0),
-#        StrLenField('UUID', '', length_from = lambda x: 16),
+        #        StrLenField('UUID', '', length_from = lambda x: 16),
         UUIDField('UUID', ''),
         LEShortField("InterfaceVer",0),
         LEShortField("InterfaceVerMinor",0),
-#        StrFixedLenField('TransferSyntax', '', 16),
+        #        StrFixedLenField('TransferSyntax', '', 16),
         UUIDField('TransferSyntax', ''),
         LEIntField('TransferSyntaxVersion', 0)
     ]
@@ -1538,11 +1540,12 @@ class DCERPC_Bind(Packet):
         LEShortField("MaxTransmitFrag",5840),
         LEShortField("MaxReceiveFrag",5840),
         XLEIntField("AssocGroup",0),
-#        ByteField("NumCtxItems",1),
-#        PacketLenField("NumCtxItems", 1, None, length_from),
+        #        ByteField("NumCtxItems",1),
+        #        PacketLenField("NumCtxItems", 1, None, length_from),
         FieldLenField("NumCtxItems", 0, fmt='B', count_of="CtxItems"),
         StrLenField("FixGap", "\0"*3, length_from=lambda x:3),
-        PacketListField("CtxItems", None, DCERPC_CtxItem, count_from=lambda pkt:pkt.NumCtxItems)
+        PacketListField(
+            "CtxItems", None, DCERPC_CtxItem, count_from=lambda pkt:pkt.NumCtxItems)
     ]
 
 class DCERPC_Ack_CtxItem(Packet):
@@ -1551,7 +1554,7 @@ class DCERPC_Ack_CtxItem(Packet):
         LEShortField("AckResult",2),
         LEShortField("AckReason",1),
         #Field("TransferSyntax","\0"*16, fmt="QQ"),
-#        StrFixedLenField('TransferSyntax', '', 16),
+        #        StrFixedLenField('TransferSyntax', '', 16),
         UUIDField("TransferSyntax", ""),
         LEIntField('TransferSyntaxVersion', 0)
     ]
@@ -1561,7 +1564,7 @@ class DCERPC_Auth_Verfier(Packet):
     """http://www.opengroup.org/onlinepubs/9629399/chap13.htm#tagcjh_18"""
     name = "DCERPC Auth Verifier"
     fields_desc = [
-#        StrFixedLenField("Pad", "", 5),
+        #        StrFixedLenField("Pad", "", 5),
         ByteField("Type", 0),
         ByteField("Level", 0),
         ByteField("PadLength", 0),
@@ -1576,11 +1579,13 @@ class DCERPC_Bind_Ack(Packet):
         LEShortField("MaxReceiveFrag",4280),
         XLEIntField("AssocGroup",0x4ef7),
         FieldLenField("SecondAddrLen", 14, fmt='<H', length_of="SecondAddr"),
-        StrLenField("SecondAddr", "\\PIPE\\browser\0", length_from=lambda x:x.SecondAddrLen),
-#        ByteField("NumCtxItems",1),
+        StrLenField(
+            "SecondAddr", "\\PIPE\\browser\0", length_from=lambda x:x.SecondAddrLen),
+        #        ByteField("NumCtxItems",1),
         FieldLenField("NumCtxItems", 0, fmt='B', count_of="CtxItems"),
         StrLenField("FixGap", "\0"*3, length_from=lambda x:3),
-        PacketListField("CtxItems", 0, DCERPC_Ack_CtxItem, count_from=lambda pkt:pkt.NumCtxItems)
+        PacketListField(
+            "CtxItems", 0, DCERPC_Ack_CtxItem, count_from=lambda pkt:pkt.NumCtxItems)
     ]
 
 RAP_OP_NETSHAREENUM = 0x00
@@ -1595,7 +1600,8 @@ class RAP_Request(Packet):
         LEShortEnumField("Opcode",RAP_OP_NETSHAREENUM,RAP_Opcodes),
         StrNullField("ParamDesc",""),
         StrNullField("DataDesc", ""),
-        StrLenField("Params", "", length_from=lambda x: x.length_of_RAPParams()),
+        StrLenField(
+            "Params", "", length_from=lambda x: x.length_of_RAPParams()),
         StrNullField("AuxDesc", ""),
     ]
     def length_of_RAPParams(self):
@@ -1616,37 +1622,57 @@ class RAP_Response(Packet):
 
 bind_bottom_up(NBTSession, NBTSession_Request, TYPE = lambda x: x==0x81)
 bind_bottom_up(NBTSession, SMB_Header, TYPE = lambda x: x==0)
-bind_bottom_up(SMB_Header, SMB_Negociate_Protocol_Response, Command=lambda x: x==0x72, Flags=lambda x: x&0x80)
-bind_bottom_up(SMB_Header, SMB_Negociate_Protocol_Request_Counts, Command=lambda x: x==0x72, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Negociate_Protocol_Response,
+               Command=lambda x: x==0x72, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Negociate_Protocol_Request_Counts,
+               Command=lambda x: x==0x72, Flags=lambda x: not x&0x80)
 #bind_bottom_up(SMB_Header, SMB_Sessionsetup_AndX_Request, Command=lambda x: x==0x73, Flags=lambda x: not x&0x80, Flags2=lambda x: not x&2)
-bind_bottom_up(SMB_Header, SMB_Sessionsetup_AndX_Request2, Command=lambda x: x==0x73, Flags=lambda x: not x&0x80, Flags2=lambda x: not x&SMB_FLAGS2_EXT_SEC)
-bind_bottom_up(SMB_Header, SMB_Sessionsetup_ESEC_AndX_Request, Command=lambda x: x==0x73, Flags=lambda x: not x&0x80, Flags2=lambda x: x&SMB_FLAGS2_EXT_SEC)
+bind_bottom_up(SMB_Header, SMB_Sessionsetup_AndX_Request2, Command=lambda x: x==
+               0x73, Flags=lambda x: not x&0x80, Flags2=lambda x: not x&SMB_FLAGS2_EXT_SEC)
+bind_bottom_up(SMB_Header, SMB_Sessionsetup_ESEC_AndX_Request, Command=lambda x:
+               x==0x73, Flags=lambda x: not x&0x80, Flags2=lambda x: x&SMB_FLAGS2_EXT_SEC)
 #bind_bottom_up(SMB_Header, SMB_Sessionsetup_AndX_Response2, Command=lambda x: x==0x73, Flags=lambda x: x&0x80)
 bind_bottom_up(SMB_Header, SMB_Treedisconnect, Command=lambda x: x==0x71)
-bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Request, Command=lambda x: x==0x75, Flags=lambda x: not x&0x80)
-bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Response, Command=lambda x: x==0x75, Flags=lambda x: x&0x80)
-bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Response2, Command=lambda x: x==0x75, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Request,
+               Command=lambda x: x==0x75, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Response,
+               Command=lambda x: x==0x75, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Response2,
+               Command=lambda x: x==0x75, Flags=lambda x: x&0x80)
 #bind_bottom_up(SMB_Header, SMB_Treeconnect_AndX_Response_Extended, Command=lambda x: x==0x75, Flags=lambda x: x&0x80)
-bind_bottom_up(SMB_Header, SMB_NTcreate_AndX_Request, Command=lambda x: x==0xa2, Flags=lambda x: not x&0x80)
-bind_bottom_up(SMB_Header, SMB_NTcreate_AndX_Response, Command=lambda x: x==0xa2, Flags=lambda x: x&0x80)
-bind_bottom_up(SMB_Header, SMB_Trans_Request, Command=lambda x: x==0x25, Flags=lambda x: not x&0x80)
-bind_bottom_up(SMB_Header, SMB_Trans2_Request, Command=lambda x: x==0x32, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_NTcreate_AndX_Request,
+               Command=lambda x: x==0xa2, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_NTcreate_AndX_Response,
+               Command=lambda x: x==0xa2, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Trans_Request,
+               Command=lambda x: x==0x25, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Trans2_Request,
+               Command=lambda x: x==0x32, Flags=lambda x: not x&0x80)
 bind_bottom_up(SMB_Header, SMB_Trans2_Secondary_Request, Command=lambda x: x==0x33, Flags=lambda x: not x&0x80)
 
-bind_bottom_up(SMB_Header, SMB_Write_AndX_Request, Command=lambda x: x==0x2f, Flags=lambda x: not x&0x80)
-bind_bottom_up(SMB_Header, SMB_Write_AndX_Response, Command=lambda x: x==0x2f, Flags=lambda x: x&0x80)
-bind_bottom_up(SMB_Header, SMB_Write_Request, Command=lambda x: x==SMB_COM_WRITE, Flags=lambda x: not x&0x80)
-bind_bottom_up(SMB_Header, SMB_Write_Response, Command=lambda x: x==SMB_COM_WRITE, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Write_AndX_Request,
+               Command=lambda x: x==0x2f, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Write_AndX_Response,
+               Command=lambda x: x==0x2f, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Write_Request,
+               Command=lambda x: x==SMB_COM_WRITE, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Write_Response,
+               Command=lambda x: x==SMB_COM_WRITE, Flags=lambda x: x&0x80)
 
-bind_bottom_up(SMB_Header, SMB_Read_AndX_Request, Command=lambda x: x==0x2e, Flags=lambda x: not x&0x80)
-bind_bottom_up(SMB_Header, SMB_Read_AndX_Response, Command=lambda x: x==0x2e, Flags=lambda x: x&0x80)
+bind_bottom_up(SMB_Header, SMB_Read_AndX_Request,
+               Command=lambda x: x==0x2e, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Read_AndX_Response,
+               Command=lambda x: x==0x2e, Flags=lambda x: x&0x80)
 
-bind_bottom_up(SMB_Header, SMB_Open_AndX_Request, Command=lambda x: x==0x2d, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Open_AndX_Request,
+               Command=lambda x: x==0x2d, Flags=lambda x: not x&0x80)
 
 bind_bottom_up(SMB_Header, SMB_Close, Command=lambda x: x==SMB_COM_CLOSE)
-bind_bottom_up(SMB_Header, SMB_Logoff_AndX, Command=lambda x: x==SMB_COM_LOGOFF_ANDX)
+bind_bottom_up(
+    SMB_Header, SMB_Logoff_AndX, Command=lambda x: x==SMB_COM_LOGOFF_ANDX)
 bind_bottom_up(SMB_Header, SMB_Echo, Command=lambda x: x==SMB_COM_ECHO)
-bind_bottom_up(SMB_Header, SMB_Delete_Request, Command=lambda x: x==SMB_COM_DELETE, Flags=lambda x: not x&0x80)
+bind_bottom_up(SMB_Header, SMB_Delete_Request,
+               Command=lambda x: x==SMB_COM_DELETE, Flags=lambda x: not x&0x80)
 
 #bind_bottom_up(SMB_Write_AndX_Request, SMB_Data)
 bind_bottom_up(SMB_Read_AndX_Response, SMB_Data)
@@ -1659,7 +1685,8 @@ bind_bottom_up(DCERPC_Header, DCERPC_Bind_Ack, PacketType=lambda x: x==12)
 #bind_bottom_up(DCERPC_CtxItem, DCERPC_CtxItem)
 
 #bind_bottom_up(SMB_Sessionsetup_AndX_Request, SMB_Treeconnect_AndX_Request, AndXCommand=lambda x: x==0x75)
-bind_bottom_up(SMB_Sessionsetup_AndX_Request2, SMB_Treeconnect_AndX_Request, AndXCommand=lambda x: x==0x75)
+bind_bottom_up(SMB_Sessionsetup_AndX_Request2,
+               SMB_Treeconnect_AndX_Request, AndXCommand=lambda x: x==0x75)
 #bind_bottom_up(SMB_Negociate_Protocol_Request_Counts, SMB_Negociate_Protocol_Request_Tail)
 #bind_bottom_up(SMB_Negociate_Protocol_Request_Tail, SMB_Negociate_Protocol_Request_Tail)
 bind_bottom_up(SMB_Header, SMB_Parameters)
@@ -1677,7 +1704,6 @@ bind_top_down(SMB_Header, SMB_Write_AndX_Response, Command=0x2f)
 bind_top_down(SMB_Header, SMB_Write_Response, Command=SMB_COM_WRITE)
 bind_top_down(SMB_Header, SMB_Read_AndX_Response, Command=0x2e)
 bind_top_down(SMB_Header, SMB_Trans_Request, Command=0x25)
-
 bind_top_down(SMB_Header, SMB_Trans2_Request, Command=0x32)
 bind_top_down(SMB_Header, SMB_Trans2_Secondary_Request, Command=0x33)
 bind_top_down(SMB_Header, SMB_Open_AndX_Request, Command=0x2d)
@@ -1688,4 +1714,3 @@ bind_top_down(DCERPC_Header, DCERPC_Response, PacketType=2)
 bind_top_down(DCERPC_Header, DCERPC_Bind, PacketType=11)
 bind_top_down(DCERPC_Header, DCERPC_Bind_Ack, PacketType=12)
 #bind_bottom_up(DCERPC_Auth_Verfier, NTLMSSP_Header, Type=lambda x: x==10)
-
