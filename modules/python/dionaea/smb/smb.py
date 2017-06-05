@@ -26,29 +26,23 @@
 # *
 # *******************************************************************************/
 
-from dionaea.core import *
+from dionaea.core import incident, connection, g_dionaea
 
-import datetime
 import traceback
 import hashlib
 import logging
 import os
 import tempfile
-import binascii
-import os
-import hashlib
-from dionaea.util import *
 from uuid import UUID
 
 from .include.smbfields import *
 from .rpcservices import __shares__
-from .rpcservices import __shares_Samba__
-from .rpcservices import OS_TYPE
-from .include.gssapifields import GSSAPI, SPNEGO, NegTokenTarg
+from .include.gssapifields import GSSAPI,SPNEGO, NegTokenTarg
 from .include.ntlmfields import NTLMSSP_Header, NTLM_Negotiate, NTLM_Challenge, NTLMSSP_REQUEST_TARGET
 from .include.packet import Raw
-from .include.asn1.ber import BER_len_dec, BER_len_enc, BER_identifier_dec, BER_CLASS_APP, BER_CLASS_CON, \
-    BER_identifier_enc
+from .include.asn1.ber import BER_len_dec, BER_len_enc, BER_identifier_dec
+from .include.asn1.ber import BER_CLASS_APP, BER_CLASS_CON,BER_identifier_enc
+from .include.asn1.ber import BER_Exception
 from dionaea.util import calculate_doublepulsar_opcode, xor
 
 smblog = logging.getLogger('SMB')
