@@ -1,4 +1,4 @@
-# ********************************************************************************
+# *************************************************************************
 # *                               Dionaea
 # *                           - catches bugs -
 # *
@@ -37,11 +37,11 @@ from uuid import UUID
 
 from .include.smbfields import *
 from .rpcservices import __shares__
-from .include.gssapifields import GSSAPI,SPNEGO, NegTokenTarg
+from .include.gssapifields import GSSAPI, SPNEGO, NegTokenTarg
 from .include.ntlmfields import NTLMSSP_Header, NTLM_Negotiate, NTLM_Challenge, NTLMSSP_REQUEST_TARGET
 from .include.packet import Raw
 from .include.asn1.ber import BER_len_dec, BER_len_enc, BER_identifier_dec
-from .include.asn1.ber import BER_CLASS_APP, BER_CLASS_CON,BER_identifier_enc
+from .include.asn1.ber import BER_CLASS_APP, BER_CLASS_CON, BER_identifier_enc
 from .include.asn1.ber import BER_Exception
 from dionaea.util import calculate_doublepulsar_opcode, xor
 
@@ -59,7 +59,6 @@ registered_services = {}
 
 def register_rpc_service(service):
     uuid = service.uuid
-    global registered_calls
     registered_services[uuid] = service
 
 
@@ -94,10 +93,10 @@ class smbd(connection):
         rpcservices.OS_TYPE = self.config.os_type
 
     def handle_established(self):
-        # self.timeouts.sustain = 120
+        #		self.timeouts.sustain = 120
         self.timeouts.idle = 120
-        # self._in.accounting.limit  = 2000*1024
-        # self._out.accounting.limit = 2000*1024
+        #		self._in.accounting.limit  = 2000*1024
+        #		self._out.accounting.limit = 2000*1024
         self.processors()
 
     def handle_io_in(self, data):
@@ -105,12 +104,12 @@ class smbd(connection):
             p = NBTSession(data, _ctx=self)
         except:
             t = traceback.format_exc()
-            smblog.debug(t)
+            smblog.error(t)
             return len(data)
 
         if len(data) < (p.LENGTH + 4):
             # we probably do not have the whole packet yet -> return 0
-            smblog.debug('=== SMB did not get enough data')
+            smblog.info('=== SMB did not get enough data')
             return 0
 
         if p.TYPE == 0x81:
@@ -122,7 +121,7 @@ class smbd(connection):
 
         if p.haslayer(SMB_Header) and p[SMB_Header].Start != b'\xffSMB':
             # not really SMB Header -> bail out
-            smblog.debug('=== not really SMB')
+            smblog.error('=== not really SMB')
             self.close()
             return len(data)
 
@@ -140,40 +139,26 @@ class smbd(connection):
             x.show()
 
         r = self.process(p)
-        smblog.debug('packet: {0}'.format(p.summary()))
+        smblog.debug("packet: %s" % p.summary())
 
-        #        if p.haslayer(Raw):
-        #            smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
-        #            p.show()
-
-        #        i = incident("dionaea.module.python.smb.info")
-        #        i.con = self
-        #        i.direction = 'in'
-        #        i.data = p.summary()
-        #        i.report()
+        if p.haslayer(Raw):
+            smblog.warning("p.haslayer(Raw): %s" % p.getlayer(Raw).build())
+            p.show()
 
         if self.state['stop']:
             smblog.info("faint death.")
             return len(data)
 
         if r:
-            smblog.debug('response: {0}'.format(r.summary()))
+            smblog.debug("response: %s" % r.summary())
             r.show()
 
-            #            i = incident("dionaea.module.python.smb.info")
-            #            i.con = self
-            #            i.direction = 'out'
-            #            i.data = r.summary()
-            #            i.report()
-
-            #            r.build()
-            # r.show2()
             self.send(r.build())
         else:
             smblog.error('process() returned None.')
 
         if p.haslayer(Raw):
-            smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
+            smblog.warning("p.haslayer(Raw): %s" % p.getlayer(Raw).build())
             p.show()
             # some rest seems to be not parsed correctly
             # could be start of some other packet, junk, or failed packet dissection
@@ -185,8 +170,9 @@ class smbd(connection):
     def process(self, p):
         r = ''
         rp = None
-        #        self.state['readcount'] = 0
-        # if self.state == STATE_START and p.getlayer(SMB_Header).Command == 0x72:
+        #		self.state['readcount'] = 0
+        # if self.state == STATE_START and p.getlayer(SMB_Header).Command ==
+        # 0x72:
         rstatus = 0
         smbh = p.getlayer(SMB_Header)
         Command = smbh.Command
@@ -208,11 +194,12 @@ class smbd(connection):
 
             r.DialectIndex = c
 
-            #            r.Capabilities = r.Capabilities & ~CAP_EXTENDED_SECURITY
+            #			r.Capabilities = r.Capabilities & ~CAP_EXTENDED_SECURITY
             if not p.Flags2 & SMB_FLAGS2_EXT_SEC:
                 r.Capabilities = r.Capabilities & ~CAP_EXTENDED_SECURITY
 
-        # elif self.state == STATE_SESSIONSETUP and p.getlayer(SMB_Header).Command == 0x73:
+        # elif self.state == STATE_SESSIONSETUP and
+        # p.getlayer(SMB_Header).Command == 0x73:
         elif Command == SMB_COM_SESSION_SETUP_ANDX:
             if p.haslayer(SMB_Sessionsetup_ESEC_AndX_Request):
                 r = SMB_Sessionsetup_ESEC_AndX_Response(
@@ -229,17 +216,18 @@ class smbd(connection):
                     ntlmssp = NTLMSSP_Header(sb)
                     ntlmssp.show()
                     # FIXME what is a proper reply?
-                    # currently there windows calls Sessionsetup_AndX2_request after this one with bad reply
+                    # currently there windows calls Sessionsetup_AndX2_request
+                    # after this one with bad reply
                     if ntlmssp.MessageType == 1:
                         r.Action = 0
                         ntlmnegotiate = ntlmssp.getlayer(NTLM_Negotiate)
                         rntlmssp = NTLMSSP_Header(MessageType=2)
                         rntlmchallenge = NTLM_Challenge(
                             NegotiateFlags=ntlmnegotiate.NegotiateFlags)
-                        #                        if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
-                        #                            rntlmchallenge.TargetNameFields.Offset = 0x38
-                        #                            rntlmchallenge.TargetNameFields.Len = 0x1E
-                        #                            rntlmchallenge.TargetNameFields.MaxLen = 0x1E
+                        #						if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
+                        #							rntlmchallenge.TargetNameFields.Offset = 0x38
+                        #							rntlmchallenge.TargetNameFields.Len = 0x1E
+                        #							rntlmchallenge.TargetNameFields.MaxLen = 0x1E
 
                         rntlmchallenge.ServerChallenge = b"\xa4\xdf\xe8\x0b\xf5\xc6\x1e\x3a"
                         rntlmssp = rntlmssp / rntlmchallenge
@@ -287,10 +275,10 @@ class smbd(connection):
                             rntlmchallenge = NTLM_Challenge(
                                 NegotiateFlags=ntlmnegotiate.NegotiateFlags)
                             rntlmchallenge.TargetInfoFields.Offset = rntlmchallenge.TargetNameFields.Offset = 0x30
-                            #                            if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
-                            #                                rntlmchallenge.TargetNameFields.Offset = 0x38
-                            #                                rntlmchallenge.TargetNameFields.Len = 0x1E
-                            #                                rntlmchallenge.TargetNameFields.MaxLen = 0x1E
+                            #							if ntlmnegotiate.NegotiateFlags & NTLMSSP_REQUEST_TARGET:
+                            #								rntlmchallenge.TargetNameFields.Offset = 0x38
+                            #								rntlmchallenge.TargetNameFields.Len = 0x1E
+                            #								rntlmchallenge.TargetNameFields.MaxLen = 0x1E
                             rntlmchallenge.ServerChallenge = b"\xa4\xdf\xe8\x0b\xf5\xc6\x1e\x3a"
                             rntlmssp = rntlmssp / rntlmchallenge
                             rntlmssp.show()
@@ -332,7 +320,7 @@ class smbd(connection):
         elif Command == SMB_COM_TREE_CONNECT_ANDX:
             r = SMB_Treeconnect_AndX_Response()
             h = p.getlayer(SMB_Treeconnect_AndX_Request)
-            #            print ("Service : %s" % h.Path)
+            #			print ("Service : %s" % h.Path)
 
             # for SMB_Treeconnect_AndX_Request.Flags = 0x0008
             if h.Flags & 0x08:
@@ -475,7 +463,7 @@ class smbd(connection):
                 self.fids[h.FID].write(h.Data)
             else:
                 self.buf += h.Data
-                #                self.process_dcerpc_packet(p.getlayer(SMB_Write_AndX_Request).Data)
+                #				self.process_dcerpc_packet(p.getlayer(SMB_Write_AndX_Request).Data)
                 if len(self.buf) >= 10:
                     # we got the dcerpc header
                     inpacket = DCERPC_Header(self.buf[:10])
@@ -503,7 +491,7 @@ class smbd(connection):
                 if self.state['stop']:
                     smblog.debug('drop dead!')
                 else:
-                    smblog.debug('dcerpc processing failed. bailing out.')
+                    smblog.error('dcerpc processing failed. bailing out.')
                 return rp
 
             rdata = SMB_Data()
@@ -518,7 +506,8 @@ class smbd(connection):
                 newreadcount = 0
                 self.outbuf = None
 
-            rdata.Bytes = outbuf[self.state['readcount']: self.state['readcount'] + h.MaxCountLow]
+            rdata.Bytes = outbuf[
+                          self.state['readcount']: self.state['readcount'] + h.MaxCountLow]
             rdata.ByteCount = len(rdata.Bytes) + 1
             r.DataLenLow = len(rdata.Bytes)
             smblog.debug("readcount %i len(rdata.Bytes) %i" %
@@ -542,7 +531,9 @@ class smbd(connection):
             if TransactionName[-1] == '\0':
                 TransactionName = TransactionName[:-1]
 
-            # print("'{}' == '{}' => {} {} {}".format(TransactionName, '\\PIPE\\',TransactionName == '\\PIPE\\', type(TransactionName) == type('\\PIPE\\'), len(TransactionName)) )
+            #			print("'{}' == '{}' => {} {} {}".format(TransactionName, '\\PIPE\\',
+            #				TransactionName == '\\PIPE\\', type(TransactionName) == type('\\PIPE\\'),
+            #				len(TransactionName)) )
 
             if TransactionName == '\\PIPE\\LANMAN':
                 # [MS-RAP].pdf - Remote Administration Protocol
@@ -588,7 +579,9 @@ class smbd(connection):
                 r.DataOffset = 64
 
                 rdata.ByteCount = dceplen
-                rdata.Bytes = self.outbuf + b''.join(c.encode('ascii') + b'\x00' for c in comments)
+                rdata.Bytes = self.outbuf + \
+                              b''.join(c.encode('ascii') + b'\x00' for c in comments)
+
 
             elif TransactionName == '\\PIPE\\':
                 if socket.htons(h.Setup[0]) == TRANS_NMPIPE_TRANSACT:
@@ -599,7 +592,7 @@ class smbd(connection):
                         if self.state['stop']:
                             smblog.debug('drop dead!')
                         else:
-                            smblog.debug('dcerpc processing failed. bailing out.')
+                            smblog.error('dcerpc processing failed. bailing out.')
                         return rp
                     self.outbuf = outpacket.build()
                     dceplen = len(self.outbuf)
@@ -711,14 +704,14 @@ class smbd(connection):
             r = SMB_NT_Trans_Response()
             rstatus = 0x00000000  # STATUS_SUCCESS
         else:
-            smblog.debug('...unknown SMB Command. bailing out.')
+            smblog.error('...unknown SMB Command. bailing out.')
             p.show()
 
         if r:
             smbh = SMB_Header(Status=rstatus)
             smbh.Command = r.smb_cmd
             smbh.Flags2 = p.getlayer(SMB_Header).Flags2
-            #            smbh.Flags2 = p.getlayer(SMB_Header).Flags2 & ~SMB_FLAGS2_EXT_SEC
+            #			smbh.Flags2 = p.getlayer(SMB_Header).Flags2 & ~SMB_FLAGS2_EXT_SEC
             smbh.MID = p.getlayer(SMB_Header).MID
             smbh.PID = p.getlayer(SMB_Header).PID
             # Deception for DoublePulsar, we fix the XOR key first as 0x5273365E
@@ -744,8 +737,6 @@ class smbd(connection):
         else:
             dcep = buf
 
-        global registered_calls
-
         outbuf = None
 
         smblog.debug("data")
@@ -754,8 +745,8 @@ class smbd(connection):
         except:
             return None
         if dcep.AuthLen > 0:
-            #            print(dcep.getlayer(Raw).underlayer.load)
-            #            dcep.getlayer(Raw).underlayer.decode_payload_as(DCERPC_Auth_Verfier)
+            #			print(dcep.getlayer(Raw).underlayer.load)
+            #			dcep.getlayer(Raw).underlayer.decode_payload_as(DCERPC_Auth_Verfier)
             dcep.show()
 
         if dcep.PacketType == 11:  # bind
@@ -818,7 +809,7 @@ class smbd(connection):
             outbuf = resp
         else:
             # unknown DCERPC packet -> logcrit and bail out.
-            smblog.debug('unknown DCERPC packet. bailing out.')
+            smblog.error('unknown DCERPC packet. bailing out.')
         return outbuf
 
     def handle_timeout_idle(self):
@@ -850,7 +841,7 @@ class epmapper(smbd):
             smblog.warning("epmapper - not enough data")
             return 0
 
-        smblog.debug('packet: {0}'.format(p.summary()))
+        smblog.debug("packet: %s" % p.summary())
 
         r = self.process_dcerpc_packet(p)
 
@@ -862,12 +853,12 @@ class epmapper(smbd):
             smblog.error('dcerpc processing failed. bailing out.')
             return len(data)
 
-        smblog.debug('response: {0}'.format(r.summary()))
+        smblog.debug("response: %s" % r.summary())
         r.show()
         self.send(r.build())
 
         if p.haslayer(Raw):
-            smblog.warning('p.haslayer(Raw): {0}'.format(p.getlayer(Raw).build()))
+            smblog.warning("p.haslayer(Raw): %s" % p.getlayer(Raw).build())
             p.show()
 
         return len(data)
